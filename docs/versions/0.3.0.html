@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Factorio Learning Environment - v0.3.0</title>
+
+    <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro" rel="stylesheet" />
+
+    <link rel="stylesheet" href="../static/css/bulma.min.css" />
+    <link rel="stylesheet" href="../static/css/bulma-carousel.min.css" />
+    <link rel="stylesheet" href="../static/css/bulma-slider.min.css" />
+    <link rel="stylesheet" href="../static/css/fontawesome.all.min.css" />
+    <link rel="stylesheet" href="../static/css/academicons.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css" />
+    <link rel='shortcut icon' type='image/x-icon' href='../favicon.ico' />
+    <style>
+        .math-block {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-left: 3px solid #2196F3;
+        }
+        .definition {
+            margin: 10px 0;
+            padding: 5px;
+        }
+        .note {
+            font-style: italic;
+            color: #666;
+            margin: 10px 0;
+        }
+        .feature-box {
+            border-left: 3px solid #2196F3;
+            padding: 10px 15px;
+            margin: 15px 0;
+            background-color: #f8f9fa;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .heatmap-container {
+            text-align: center;
+            margin: 40px 0;
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .heatmap-container img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        .complexity-low { color: #27ae60; font-weight: 600; }
+        .complexity-medium { color: #f39c12; font-weight: 600; }
+        .complexity-high { color: #e74c3c; font-weight: 600; }
+        .entity-icon {
+            width: 32px;
+            height: 32px;
+            margin-right: 10px;
+            vertical-align: middle;
+            border-radius: 4px;
+        }
+        .entity-name {
+            font-weight: 500;
+            color: #2c3e50;
+            display: inline-flex;
+            align-items: center;
+        }
+        .complexity-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9em;
+            text-align: center;
+            min-width: 40px;
+        }
+        .complexity-extreme {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+
+        /* Tabbed Examples Section */
+        .examples-section {
+            margin: 40px 0;
+        }
+        .tabs-container {
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 0;
+            display: flex;
+            gap: 0;
+        }
+        .tab-button {
+            padding: 15px 30px;
+            background: #f5f5f5;
+            border: none;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            color: #666;
+            border-top: 2px solid transparent;
+            border-left: 1px solid #e0e0e0;
+            transition: all 0.3s ease;
+            position: relative;
+            bottom: -2px;
+        }
+        .tab-button:first-child {
+            border-left: none;
+        }
+        .tab-button:hover {
+            background: #e8e8e8;
+            color: #333;
+        }
+        .tab-button.active {
+            background: white;
+            color: #2196F3;
+            border-bottom: 2px solid white;
+            border-top: 2px solid #2196F3;
+        }
+        .tab-content {
+            display: none;
+            padding: 30px;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-top: none;
+            animation: fadeIn 0.3s ease;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .example-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            margin-top: 20px;
+        }
+        .example-grid-single {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 25px;
+            margin-top: 20px;
+        }
+        @media (max-width: 768px) {
+            .example-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .example-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #2196F3;
+        }
+        .example-card h4 {
+            margin: 0 0 15px 0;
+            color: #2196F3;
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+        .example-card pre {
+            background: #fff;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 0.9em;
+            line-height: 1.5;
+            margin: 0;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .example-card code {
+            font-family: 'Courier New', monospace;
+            color: #333;
+        }
+        /* Python syntax highlighting with highlight.js */
+        .example-card pre code.hljs {
+            padding: 15px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            line-height: 1.6;
+            max-height: 500px;
+            overflow-y: auto;
+            display: block;
+        }
+        /* Enhanced syntax colors for better visibility */
+        .hljs-title.function_ {
+            color: #4078f2 !important;
+            font-weight: 500;
+        }
+        .hljs-built_in {
+            color: #0184bc !important;
+        }
+        .hljs-keyword {
+            color: #a626a4 !important;
+        }
+        .hljs-string {
+            color: #50a14f !important;
+        }
+        .hljs-number {
+            color: #986801 !important;
+        }
+        .hljs-comment {
+            color: #a0a1a7 !important;
+            font-style: italic;
+        }
+        .example-image {
+            width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin: 15px 0;
+        }
+        .full-width-card {
+            grid-column: 1 / -1;
+        }
+        .result-card {
+            background: #e8f5e9;
+            border-left-color: #4caf50;
+        }
+        .result-card h4 {
+            color: #4caf50;
+        }
+    </style>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script defer src="../static/js/fontawesome.all.min.js"></script>
+    <script src="../static/js/bulma-carousel.min.js"></script>
+    <script src="../static/js/bulma-slider.min.js"></script>
+    <script src="../static/js/index.js"></script>
+
+    <!-- Highlight.js for syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+
+    <script>
+        function switchTab(event, tabId) {
+            // Hide all tab contents
+            const tabContents = document.getElementsByClassName('tab-content');
+            for (let i = 0; i < tabContents.length; i++) {
+                tabContents[i].classList.remove('active');
+            }
+
+            // Remove active class from all buttons
+            const tabButtons = document.getElementsByClassName('tab-button');
+            for (let i = 0; i < tabButtons.length; i++) {
+                tabButtons[i].classList.remove('active');
+            }
+
+            // Show the selected tab content
+            document.getElementById(tabId).classList.add('active');
+
+            // Add active class to the clicked button
+            event.currentTarget.classList.add('active');
+        }
+
+        // Initialize syntax highlighting when page loads
+        document.addEventListener('DOMContentLoaded', (event) => {
+            // Configure highlight.js to not auto-detect and preserve manual spans
+            hljs.configure({ignoreUnescapedHTML: true});
+
+            // Highlight all code blocks
+            document.querySelectorAll('pre code.language-python').forEach((block) => {
+                hljs.highlightElement(block);
+            });
+        });
+    </script>
+</head>
+<body>
+    <section class="hero">
+        <div class="hero-body">
+            <div class="container is-max-desktop">
+                <div class="columns is-centered">
+                    <div class="column has-text-centered">
+                        <h1 class="title is-1 publication-title">Factorio Learning Environment</h1>
+                        <h2 class="title is-2">Version 0.3.0 Release</h2>
+
+                        <div class="is-size-5 publication-authors">
+                            <span class="author-block">
+                                SDK Upgrades and Benchmarking Progress
+                            </span>
+                        </div>
+
+                        <div class="column has-text-centered">
+                            <div class="publication-links">
+                                <span class="link-block">
+                                    <a target="_blank" href="https://github.com/JackHopkins/factorio-learning-environment" class="external-link button is-normal is-rounded is-dark">
+                                        <span class="icon">
+                                            <i class="fab fa-github"></i>
+                                        </span>
+                                        <span>Code</span>
+                                    </a>
+                                </span>
+                                <span class="link-block">
+                                    <a target="_blank" href="../leaderboard" class="external-link button is-normal is-rounded is-dark">
+                                        <span class="icon">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><path fill="#ffffff" d="M353.8 54.1L330.2 6.3c-3.9-8.3-16.1-8.6-20.4 0L286.2 54.1l-52.3 7.5c-9.3 1.4-13.3 12.9-6.4 19.8l38 37-9 52.1c-1.4 9.3 8.2 16.5 16.8 12.2l46.9-24.8 46.6 24.4c8.6 4.3 18.3-2.9 16.8-12.2l-9-52.1 38-36.6c6.8-6.8 2.9-18.3-6.4-19.8l-52.3-7.5zM256 256c-17.7 0-32 14.3-32 32l0 192c0 17.7 14.3 32 32 32l128 0c17.7 0 32-14.3 32-32l0-192c0-17.7-14.3-32-32-32l-128 0zM32 320c-17.7 0-32 14.3-32 32L0 480c0 17.7 14.3 32 32 32l128 0c17.7 0 32-14.3 32-32l0-128c0-17.7-14.3-32-32-32L32 320zm416 96l0 64c0 17.7 14.3 32 32 32l128 0c17.7 0 32-14.3 32-32l0-64c0-17.7-14.3-32-32-32l-128 0c-17.7 0-32 14.3-32 32z"/></svg>
+                                        </span>
+                                        <span>Leaderboard</span>
+                                    </a>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <style>
+        /* Improve video loading and display */
+        .video-container {
+            position: relative;
+            width: 100%;
+            min-height: 150px; /* Prevents layout shift while loading */
+            background-color: #fff; /* Placeholder color while loading */
+        }
+
+        .video-container img {
+            width: 100%;
+            height: auto;
+            object-fit: cover;
+            background-color: #fff;
+            display: block;
+        }
+
+        /* Improved video overlay styling */
+        .video-overlay {
+            position: absolute;
+            bottom: 10px;
+            left: 5px;
+            background-color: rgba(0, 0, 0, 0.4); /* Darker background for better readability */
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 16px;
+            max-width: 90%;
+            z-index: 10;
+            font-weight: 500; /* Slightly bolder text */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3); /* Subtle shadow for better visibility */
+        }
+        .columns .column.video-column {
+                padding: 0 3px;
+                margin-bottom: 10px;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 767px) {
+            .video-container {
+                min-height: 120px; /* Smaller minimum height on mobile */
+            }
+
+            .video-overlay {
+                font-size: 14px; /* Smaller font on mobile */
+                padding: 4px 8px;
+            }
+
+            /* Optimize columns for mobile */
+            .columns .column.video-column {
+                padding: 0 3px; /* Tighter spacing on mobile */
+            }
+        }
+    </style>
+    <section class="section">
+        <div class="container is-max-widescreen">
+            <div class="rows">
+                <div class="rows is-centered">
+                    <div class="row is-full-width">
+                        <div class="columns">
+                            <div class="column has-text-left video-column">
+                                <div class="video-container">
+                                    <img src="../assets/0.3.0_vids/task_demos/task_demo_1.gif" alt="Task Demo 1" width="100%">
+                                    <div class="video-overlay"><span>Agent Building Factory</span></div>
+                                </div>
+                            </div>
+
+                            <div class="column has-text-left video-column">
+                                <div class="video-container">
+                                    <img src="../assets/0.3.0_vids/task_demos/task_demo_2.gif" alt="Task Demo 2" width="100%">
+                                    <div class="video-overlay"><span>Resource Extraction</span></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="columns">
+                            <div class="column has-text-left video-column">
+                                <div class="video-container">
+                                    <img src="../assets/0.3.0_vids/task_demos/task_demo_3.gif" alt="Task Demo 3" width="100%">
+                                    <div class="video-overlay"><span>Automated Production</span></div>
+                                </div>
+                            </div>
+
+                            <div class="column has-text-left video-column">
+                                <div class="video-container">
+                                    <img src="../assets/0.3.0_vids/task_demos/task_demo_1.gif" alt="Task Demo 4" width="100%">
+                                    <div class="video-overlay"><span>Complex Logistics</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <p style="padding-top: 10px; padding-left: 5px; font-size:110%">FLE 0.3.0: Agents autonomously building factories</p>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="container is-max-widescreen">
+            <h2 class="title is-3"><span class="dvima">FLE 0.3.0: SDK Upgrade and Benchmarking Progress</span></h2>
+            <p style="font-size: 110%;">
+                The 0.3.0 release of the Factorio Learning Environment (FLE) marks a major step forward in our effort to build a robust, extensible benchmark for agents.
+                Since the original FLE paper, where we demonstrated that frontier models struggle with spatial reasoning, constrained environments, and recovery; and the 0.2.0 release, which introduced multi-agency, backtracking agents, and vision, we have worked hard over summer to bring 0.3.0.
+            </p>
+            </br>
+            <h3 class="subtitle is-4"><span class="dvima">Quickstart</span></h3>
+            <p style="font-size: 110%;">Get started with FLE in three simple steps:</p>
+
+            <div style="margin: 20px 0;">
+                <div class="feature-box" style="background: #f8f9fa; padding: 20px; border-left: 4px solid #2196F3;">
+                    <pre style="background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 10px 0; font-family: 'Courier New', Consolas, monospace; line-height: 1.6;"><code><span style="color: #6a9955;"># 1. Install FLE with uv</span>
+<span style="color: #dcdcaa;">uv add</span> <span style="color: #ce9178;">factorio-learning-environment</span>
+
+<span style="color: #6a9955;"># 2. Start a Factorio server cluster</span>
+<span style="color: #dcdcaa;">fle cluster start</span>
+
+<span style="color: #6a9955;"># 3. Run an evaluation (with API keys in .env)</span>
+<span style="color: #dcdcaa;">fle eval</span> <span style="color: #c586c0;">--config</span> <span style="color: #ce9178;">configs/gym_run_config.json</span></code></pre>
+                </div>
+            </div>
+
+            <p style="font-size: 110%; margin-top: 20px;">
+                See the <a href="https://github.com/JackHopkins/factorio-learning-environment" target="_blank" style="color: #2196F3; text-decoration: underline;">GitHub repository</a> for detailed documentation and configuration options.
+            </p>
+            </br>
+            <h3 class="subtitle is-4"><span class="dvima">Release Highlights</span></h3>
+
+            <div class="content has-text-justified" style="margin-top:2em">
+                <div class="feature-box">
+                    <h4 class="title is-5">🤖 Claude Code Plays Factorio</h4>
+                    <p>We bridged Claude Code into Factorio via FLE and are streaming it to showcase the state of the art of frontier agents in long-horizon interactive environments. More details <a href="#" style="color: #2196F3; text-decoration: underline;">here</a>.</p>
+                </div>
+
+                <div class="feature-box">
+                    <h4 class="title is-5">🚀 Headless Environment Scaling</h4>
+                    <p>FLE no longer depends on the Factorio game client, enabling massively scalable experimentation. Our new headless game renderer provides realistic pixel observations to facilitate multimodal agent research.</p>
+                </div>
+
+                <div class="feature-box">
+                    <h4 class="title is-5">🏋️ OpenAI Gym Compatibility</h4>
+                    <p>We standardized the FLE evaluation environment to conform to the OpenAI gym interface, making it extremely easy to integrate into existing research codebases. Examples from the observation and action spaces are shown below.</p>
+                </div>
+
+                <div class="feature-box">
+                    <h4 class="title is-5">⚡ Developer and Research Tooling</h4>
+                    <p>The FLE CLI makes running experiments as simple as 1-line shell commands. We also open-source our evaluation code with features like Weights and Biases logging, sweep resuming, and analysis tools.</p>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="container is-max-widescreen">
+            <h2 class="title is-3"><span class="dvima">Environment Dynamics and Trajectory Example</span></h2>
+            <p style="font-size: 110%;">
+                Illustrative example of an agent building an automatic iron gear wheel factory. The agent iteratively debugs and refines its factory design through programmatic interaction with the game environment.
+            </p>
+
+            </br>
+
+            <div class="examples-section">
+                <div class="tabs-container">
+                    <button class="tab-button active" onclick="switchTab(event, 'example1')">Initial Mining Setup</button>
+                    <button class="tab-button" onclick="switchTab(event, 'example2')">Assembling Machine Setup</button>
+                    <button class="tab-button" onclick="switchTab(event, 'example3')">Logistics Attempt</button>
+                    <button class="tab-button" onclick="switchTab(event, 'example4')">Final Success</button>
+                </div>
+
+                <div id="example1" class="tab-content active">
+                    <h3 class="title is-4">Initial Mining Setup</h3>
+                    <p>The agent sets up electric mining drills on an iron ore patch and connects them to electric furnaces for automated iron plate production.</p>
+
+                    <div class="example-grid">
+                        <div class="example-card">
+                            <h4>🎮 Game State (Before)</h4>
+                            <img src="../assets/0.3.0_vids/iron_gear_wheel/15_17_engine_setup.gif" alt="Before state" class="example-image">
+                        </div>
+
+                        <div class="example-card">
+                            <h4>🎬 Game State (After)</h4>
+                            <img src="../assets/0.3.0_vids/iron_gear_wheel/34_36_furnaces.gif" alt="After animation" class="example-image">
+                        </div>
+                    </div>
+
+                    <div class="example-grid-single">
+                        <div class="example-card">
+                            <h4>⚡ Action Program</h4>
+                            <pre><code class="language-python"># Find iron ore and setup mining
+iron_pos = <span class="hljs-built_in">nearest</span>(Resource.IronOre)
+<span class="hljs-built_in">print</span>(f"Found iron ore at {iron_pos}")
+
+steam_engine = <span class="hljs-built_in">get_entity</span>(Prototype.SteamEngine, <span class="hljs-built_in">Position</span>(x=2.5, y=8.5))
+# Create mining area - need 2 electric mining drills for enough iron throughput
+# Iron gear wheels need 2 iron plates each, and we need 16 per minute
+# So we need 32 iron plates per minute
+# Electric mining drill mines 30 ore per 60 seconds, so 2 drills = 60 ore/min
+drill_area_box = BuildingBox(
+    width=2 * Prototype.ElectricMiningDrill.WIDTH + 2,
+    height=Prototype.ElectricMiningDrill.HEIGHT + Prototype.ElectricFurnace.HEIGHT + 4
+)
+drill_coords = nearest_buildable(Prototype.ElectricMiningDrill, drill_area_box, iron_pos)
+print(f"Found buildable area for drills at {drill_coords.center}")
+
+move_to(drill_coords.left_top)
+
+# Place 2 electric mining drills
+drills = []
+for i in range(2):
+    drill_pos = <span class="hljs-built_in">Position</span>(x=drill_coords.left_top.x + Prototype.ElectricMiningDrill.WIDTH * i, y=drill_coords.left_top.y)
+    drill = <span class="hljs-built_in">place_entity</span>(Prototype.ElectricMiningDrill, position=drill_pos, direction=Direction.DOWN)
+    drills.append(drill)
+
+    # Place furnace below each drill
+    furnace = <span class="hljs-built_in">place_entity_next_to</span>(Prototype.ElectricFurnace, drill.position, direction=Direction.DOWN)
+
+    # Connect to power
+    <span class="hljs-built_in">connect_entities</span>(steam_engine, drill, Prototype.MediumElectricPole)
+    <span class="hljs-built_in">connect_entities</span>(steam_engine, furnace, Prototype.MediumElectricPole)</code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="example2" class="tab-content">
+                    <h3 class="title is-4">Assembling Machine Setup</h3>
+                    <p>The agent places an assembler to create iron gear wheels in the vicinity of the mining setup and hooks it up to power while the mining operation collects iron plates in chests.</p>
+
+                    <div class="example-grid">
+                        <div class="example-card">
+                            <h4>🎮 Game State (Before)</h4>
+                            <img src="../assets/0.3.0_vids/iron_gear_wheel/48_50_furnaces.gif" alt="Before state" class="example-image">
+                        </div>
+
+                        <div class="example-card">
+                            <h4>🎬 Game State (After)</h4>
+                            <img src="../assets/0.3.0_vids/iron_gear_wheel/68_70_assembler_inserters.gif" alt="After animation" class="example-image">
+                        </div>
+                    </div>
+
+                    <div class="example-grid-single">
+                        <div class="example-card">
+                            <h4>⚡ Action Program</h4>
+                            <pre><code class="language-python"># Need to place assembling machines away from the mining area
+# Iron gear wheels need 2 iron plates each, and we need 16 per minute
+# Assembling machine 2 crafts 90 iron gear wheels per 60 seconds, so 1 machine is enough
+
+# Find a position away from the mining setup (at least 20 tiles away)
+assembly_position = Position(x=15.5, y=90.0)  # 20+ tiles south of furnaces
+
+# Define building area for assembler with space for inserters
+assembly_box = BuildingBox(
+    width=Prototype.AssemblingMachine2.WIDTH + 2 * Prototype.Inserter.WIDTH + 4,
+    height=Prototype.AssemblingMachine2.HEIGHT + 4
+)
+assembly_coords = nearest_buildable(Prototype.AssemblingMachine2, assembly_box, assembly_position)
+
+# Place assembling machine
+move_to(assembly_coords.center)
+assembler = place_entity(Prototype.AssemblingMachine2, position=assembly_coords.center, direction=Direction.DOWN)
+print(f"Placed assembling machine at {assembler.position}")
+
+# Set recipe to iron gear wheels
+assembler = set_entity_recipe(assembler, Prototype.IronGearWheel)
+print(f"Set recipe to iron gear wheels")
+
+# Connect assembler to power
+steam_engine = get_entity(Prototype.SteamEngine, Position(x=2.5, y=8.5))
+poles = connect_entities(steam_engine, assembler, Prototype.MediumElectricPole)
+print(f"Connected assembler to power network")
+
+# Place input inserter on the right side
+input_inserter = place_entity_next_to(Prototype.Inserter, assembler.position, direction=Direction.RIGHT, spacing=0)
+input_inserter = rotate_entity(input_inserter, Direction.LEFT)
+print(f"Placed input inserter at {input_inserter.position}")
+
+# Place output inserter on the left side
+output_inserter = place_entity_next_to(Prototype.Inserter, assembler.position, direction=Direction.LEFT, spacing=0)
+print(f"Placed output inserter at {output_inserter.position}")
+
+# Connect inserters to power
+poles = connect_entities(steam_engine, input_inserter, Prototype.MediumElectricPole)
+poles = connect_entities(steam_engine, output_inserter, Prototype.MediumElectricPole)
+print(f"Connected inserters to power")</code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="example3" class="tab-content">
+                    <h3 class="title is-4">Attempting to Connect Mining to Assembler</h3>
+                    <p>After trying to directly connect the mining output inserters to the assembler, the agent realizes that the chests are blocking the belts and removes them. This program below again produces an error because the agent did not also remove the chest being used as an input buffer at the assembler.</p>
+
+                    <div class="example-grid">
+                        <div class="example-card">
+                            <h4>🎮 Game State (Before)</h4>
+                            <img src="../assets/0.3.0_vids/iron_gear_wheel/68_70_assembler_inserters.gif" alt="Before state" class="example-image">
+                        </div>
+
+                        <div class="example-card">
+                            <h4>🎬 Game State (After)</h4>
+                            <img src="../assets/0.3.0_vids/iron_gear_wheel/86_88_inserter_nochests.gif" alt="After animation" class="example-image">
+                        </div>
+                    </div>
+
+                    <div class="example-grid-single">
+                        <div class="example-card">
+                            <h4>⚡ Action Program</h4>
+                            <pre><code class="language-python"><span class="hljs-comment"># Let me remove the iron plate storage chests and connect belts directly from furnace inserters</span>
+
+<span class="hljs-comment"># First, pickup the chests that are blocking</span>
+chest1 = <span class="hljs-built_in">get_entity</span>(Prototype.WoodenChest, <span class="hljs-built_in">Position</span>(x=<span class="hljs-number">15.5</span>, y=<span class="hljs-number">76.5</span>))
+chest2 = <span class="hljs-built_in">get_entity</span>(Prototype.WoodenChest, <span class="hljs-built_in">Position</span>(x=<span class="hljs-number">18.5</span>, y=<span class="hljs-number">76.5</span>))
+
+<span class="hljs-comment"># Extract iron plates from chests before removing them</span>
+<span class="hljs-built_in">move_to</span>(chest1.position)
+extracted1 = <span class="hljs-built_in">extract_item</span>(Prototype.IronPlate, chest1, quantity=<span class="hljs-number">351</span>)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Extracted {extracted1} iron plates from chest 1"</span>)
+
+<span class="hljs-built_in">move_to</span>(chest2.position)
+extracted2 = <span class="hljs-built_in">extract_item</span>(Prototype.IronPlate, chest2, quantity=<span class="hljs-number">351</span>)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Extracted {extracted2} iron plates from chest 2"</span>)
+
+<span class="hljs-comment"># Pickup the chests</span>
+<span class="hljs-built_in">pickup_entity</span>(chest1)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Removed chest at {chest1.position}"</span>)
+
+<span class="hljs-built_in">pickup_entity</span>(chest2)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Removed chest at {chest2.position}"</span>)
+
+<span class="hljs-comment"># Now connect the furnace output inserters to the assembler input inserter with belts</span>
+output_inserter1 = <span class="hljs-built_in">get_entity</span>(Prototype.Inserter, <span class="hljs-built_in">Position</span>(x=<span class="hljs-number">15.5</span>, y=<span class="hljs-number">75.5</span>))
+output_inserter2 = <span class="hljs-built_in">get_entity</span>(Prototype.Inserter, <span class="hljs-built_in">Position</span>(x=<span class="hljs-number">18.5</span>, y=<span class="hljs-number">75.5</span>))
+assembler_input_inserter = <span class="hljs-built_in">get_entity</span>(Prototype.Inserter, <span class="hljs-built_in">Position</span>(x=<span class="hljs-number">22.5</span>, y=<span class="hljs-number">93.5</span>))
+
+<span class="hljs-comment"># Connect first inserter to assembler input</span>
+belts1 = <span class="hljs-built_in">connect_entities</span>(
+    output_inserter1,
+    assembler_input_inserter,
+    Prototype.TransportBelt
+)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Connected first furnace output to assembler input: {belts1}"</span>)
+
+<span class="hljs-comment"># Connect second inserter to main belt</span>
+belts2 = <span class="hljs-built_in">connect_entities</span>(
+    output_inserter2,
+    belts1,
+    Prototype.TransportBelt
+)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Connected second furnace output to belt line: {belts2}"</span>)</code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="example4" class="tab-content">
+                    <h3 class="title is-4">Final Success</h3>
+                    <p>The agent removes the problematic input buffer chest and connects the transport belt-based logistics network from miner to assembler, resulting in an automated iron gear wheel system which achieves the target throughput.</p>
+
+                    <div class="example-grid">
+                        <div class="example-card">
+                            <h4>🎮 Game State (Before)</h4>
+                            <img src="../assets/0.3.0_vids/iron_gear_wheel/86_88_inserter_nochests.gif" alt="Before state" class="example-image">
+                        </div>
+
+                        <div class="example-card">
+                            <h4>🎬 Game State (After)</h4>
+                            <img src="../assets/0.3.0_vids/iron_gear_wheel/95_97_running.gif" alt="After animation" class="example-image">
+                        </div>
+                    </div>
+
+                    <div class="example-grid-single">
+                        <div class="example-card">
+                            <h4>⚡ Action Program</h4>
+                            <pre><code class="language-python"><span class="hljs-comment"># The assembler input chest is also blocking. Let me remove it too and rethink the setup</span>
+<span class="hljs-comment"># I need to place belts first, then the input chest on the belt line</span>
+
+<span class="hljs-comment"># Remove the assembler input chest</span>
+assembler_input_chest = <span class="hljs-built_in">get_entity</span>(Prototype.WoodenChest, <span class="hljs-built_in">Position</span>(x=<span class="hljs-number">23.5</span>, y=<span class="hljs-number">93.5</span>))
+<span class="hljs-built_in">move_to</span>(assembler_input_chest.position)
+<span class="hljs-built_in">pickup_entity</span>(assembler_input_chest)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Removed input chest at {assembler_input_chest.position}"</span>)
+
+<span class="hljs-comment"># Now connect the furnace output inserters to the assembler input inserter with belts</span>
+output_inserter1 = <span class="hljs-built_in">get_entity</span>(Prototype.Inserter, <span class="hljs-built_in">Position</span>(x=<span class="hljs-number">15.5</span>, y=<span class="hljs-number">75.5</span>))
+output_inserter2 = <span class="hljs-built_in">get_entity</span>(Prototype.Inserter, <span class="hljs-built_in">Position</span>(x=<span class="hljs-number">18.5</span>, y=<span class="hljs-number">75.5</span>))
+assembler_input_inserter = <span class="hljs-built_in">get_entity</span>(Prototype.Inserter, <span class="hljs-built_in">Position</span>(x=<span class="hljs-number">22.5</span>, y=<span class="hljs-number">93.5</span>))
+
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Connecting from inserter 1 at {output_inserter1.position} to assembler input at {assembler_input_inserter.position}"</span>)
+
+<span class="hljs-comment"># Connect first inserter to assembler input</span>
+belts1 = <span class="hljs-built_in">connect_entities</span>(
+    output_inserter1,
+    assembler_input_inserter,
+    Prototype.TransportBelt
+)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Connected first furnace output to assembler input: {belts1}"</span>)
+
+<span class="hljs-comment"># Connect second inserter to main belt</span>
+belts2 = <span class="hljs-built_in">connect_entities</span>(
+    output_inserter2,
+    belts1,
+    Prototype.TransportBelt
+)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Connected second furnace output to belt line: {belts2}"</span>)
+
+<span class="hljs-comment"># Refuel boiler</span>
+boiler = <span class="hljs-built_in">get_entity</span>(Prototype.Boiler, <span class="hljs-built_in">Position</span>(x=<span class="hljs-number">-4.0</span>, y=<span class="hljs-number">3.5</span>))
+<span class="hljs-built_in">move_to</span>(boiler.position)
+boiler = <span class="hljs-built_in">insert_item</span>(Prototype.Coal, boiler, quantity=<span class="hljs-number">30</span>)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">f"Refueled boiler"</span>)
+
+<span class="hljs-built_in">print</span>(<span class="hljs-string">"Belt connections complete - waiting for iron flow"</span>)</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            </br>
+            <h4 class="title is-5">Observation Space</h4>
+            <p style="font-size: 110%; line-height: 1.6;">
+                At each step, agents receive a structured <code>Observation</code> object containing comprehensive information about the game state and with fields as described below:
+            </p>
+
+            <table class="table is-striped is-fullwidth" style="font-size: 105%; margin: 20px 0;">
+                <thead>
+                    <tr style="background-color: #2196F3; color: white;">
+                        <th style="padding: 12px; width: 25%;">Field</th>
+                        <th style="padding: 12px;">Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="padding: 10px;"><strong><code>raw_text</code></strong></td>
+                        <td style="padding: 10px;">Standard output and error messages from the last action program execution, annotated with source code line numbers</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px;"><strong><code>entities</code></strong></td>
+                        <td style="padding: 10px;">List of all entities in the game world with their properties (position, type, orientation, inventory contents, warnings, etc.)</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px;"><strong><code>inventory</code></strong></td>
+                        <td style="padding: 10px;">The agent's personal inventory with item types and quantities</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px;"><strong><code>research</code></strong></td>
+                        <td style="padding: 10px;">Technology tree state with researched technologies, current research progress, and available technologies with prerequisites and costs</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px;"><strong><code>game_info</code></strong></td>
+                        <td style="padding: 10px;">Game timing information (tick count, elapsed time, game speed)</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px;"><strong><code>flows</code></strong></td>
+                        <td style="padding: 10px;">Production statistics tracking input/output rates, crafted items, harvested resources, and optional price lists for economic evaluation</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px;"><strong><code>messages</code></strong></td>
+                        <td style="padding: 10px;">Inter-agent communication messages for multi-agent coordination scenarios</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px;"><strong><code>task_info</code></strong></td>
+                        <td style="padding: 10px;">Task metadata including goal description, instructions, task identifier, and maximum trajectory length</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px;"><strong><code>task_verification</code></strong></td>
+                        <td style="padding: 10px;">Task-specific verification results indicating success/failure and metadata about progress toward objectives</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px;"><strong><code>serialized_functions</code></strong></td>
+                        <td style="padding: 10px;">Previously defined helper functions and abstractions stored in the agent's namespace for reuse across episodes</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px;"><strong><code>map_image</code></strong></td>
+                        <td style="padding: 10px;">Base64-encoded PNG rendering of the factory layout for visual agents (optional)</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p style="font-size: 110%; line-height: 1.6;">
+                This rich observation space enables agents to maintain spatial awareness, track production metrics, debug errors, and plan multi-step automation strategies. The combination of structured data and human-readable text provides both programmatic access and interpretability. Agent implementations can utilize and format these fields as needed. The agent harness used for evaluation concatenates these fields into a formatted markdown string.
+            </p>
+            </br>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="container is-max-widescreen">
+            <h2 class="title is-3"><span class="dvima">Benchmark Methodology and Results</span></h2>
+            <p style="font-size: 110%;">
+                For this release we replicated the methodology from the original FLE paper for the <b>lab-play</b> setting to evaluate the strongest general-purpose proprietary and open source models as of September 2025. The standardized agent harness is minimal: it continuously appends environment interactions to a single conversational history and, when the token budget is nearing exhaustion, invokes the LLM to produce a concise, factual summary that replaces the older history so the agent can continue reasoning with a compressed representation of past interactions. We do not report results for agents with backtracking and/or reflection logic as we did in FLE 0.2.0 and we encourage the community to experiment with more advanced agent designs.
+            </p>
+            <ul style="font-size: 110%; list-style: disc; margin-left: 40px;">
+                <li>System prompts are the same as in FLE 0.2.0, including documentation of the FLE API, Factorio recipes, and a guide describing common patterns.</li>
+                <li>Agents have a starting inventory with useful items for building functional factories.</li>
+                <li>The task objective is to achieve production throughput targets: 16 per minute for solid items and 250 per minute for fluids.</li>
+                <li>Trajectories are run for 64 program-level actions and models are prompted to make their programs modular and at most 50 lines of code.</li>
+                <li>Success is measured with a pass@8 criteria to control for variance.
+                <li>Results shown are the best performance between reasoning enabled and disabled (there were minimal differences between the two settings across all models).</li>
+            </ul>
+
+            <div class="heatmap-container">
+                <img src="../assets/images/fle_0_3_0_combined_dependency_sorted_heatmap.png?v=5"
+                     alt="FLE 0.3.0 Combined Model Performance Heatmap"
+                     style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 8px 25px rgba(0,0,0,0.15);">
+            </div>
+            </br>
+            <h3 class="subtitle is-4"><span class="dvima">Discussion</span></h3>
+            <p style="font-size: 110%;">
+                The observed performance gap between the strongest and weakest models in the lab-play setting demonstrates that the evaluation is sensitive to meaningful differences in capabilities. Open source models have caught up to the SoTA performance level observed in FLE 0.2.0 with successes in electronic circuits, steel plate, sulfur and plastic production. Meanwhile, the frontier has advanced substantially, with Claude Opus 4.1 completing tasks with over a dozen ingredient dependencies. We also show the cases in which agents managed to produce some of the target entity without meeting the target threshold as partial success, indicating a relatively smooth gradient of difficulty as the target entity resource requirements grow exponentially.
+            </p>
+            </br>
+            <p style="font-size: 110%; line-height: 1.6;">
+                While agents achieve throughput according to environment measurements, many rely on semi-manual strategies rather than building robust automation for more complex tasks. Models exhibit reward-hacking tendencies by shuttling resources manually instead of constructing functional logistics chains. Although this achieves progress toward the target, it creates a local optimum where agents avoid the more difficult but necessary step of full automation. Throughput is challenging to measure consistently due to buffering effects—agents can store items in intermediate buffers (like chests or belts) which temporarily satisfy throughput checks without true sustained production. Higher throughput targets would make it impossible to pass with manual logistics, forcing agents to build proper automation. However, we report results with the same settings as v0.2.0 to enable direct comparisons across versions.
+            </p>
+            </br>
+            
+            <h4 class="title is-5">Error Analysis Breakdown</h4>
+
+
+            <p style="font-size: 110%;">Common failure patterns can be grouped by type:</p>
+            <ul style="font-size: 110%;">
+                <li><strong>Syntactic and Execution Errors:</strong> Invalid Python code, syntax mistakes, or other execution errors that prevent actions from running at all. These errors represent a major category of failures as the agents did not follow the high-level instructions.</li>
+                <li><strong>API Misunderstandings:</strong> Misuse of FLE commands or tool arguments (e.g., incorrect parameters, misunderstanding documentation), leading to errors in the execution of the action program. These errors imply difficulty to correctly use given context.</li>
+                <li><strong>State Tracking Failures:</strong> Incorrect reasoning about the current game state, such as attempting to insert items that are not present in the inventory. These errors are the most common category of failures as the game state is dynamic and challenging to model implicitly.</li>
+                <li><strong>Planning and Control Errors:</strong> Even when primitives are known, agents fail to chain actions coherently, resulting in inefficient or incomplete trajectories. <em>Note: This category cannot be reliably quantified through automated trajectory analysis, as it requires evaluating higher-level strategic coherence rather than individual error types.</em></li>
+            </ul>
+            </br>
+            <div class="heatmap-container">
+                <img src="../assets/images/fle_0_3_0_error_types_by_model.png?v=5" alt="Error Category Distribution by Model">
+            </div>
+
+            <p style="font-size: 110%;">
+                The chart categorizes errors from trajectory logs across all evaluation tasks for the evaluated proprietary frontier models. Syntactic errors represent iterations where the model failed to generate valid Python code entirely. API misunderstandings are implied by failures which arose from Python exceptions such as TypeError, AttributeError, NameError, etc. when using the functions and objects of the FLE API. Finally, state tracking failures are implied by failures which have error messages being propagated back from the Lua code running in the Factorio game engine as well as AssertionError raises in Python. Examples of state tracking failures include attempting to insert items that are not present in the inventory, placing entities in invalid positions, connecting entities with incompatible types, etc.
+                
+            </p>
+        </br>
+
+            <p style="font-size: 110%;">
+                The distribution reveals notable model-specific patterns. Claude Opus 4.1 stands out with zero syntactic errors and almost entirely state tracking failures (97.7%), indicating strong code generation but difficulties maintaining accurate mental models of game state. All other models—Gemini 2.5 Pro, Grok 4, and GPT-5—exhibit API misunderstandings at noticeable rates (12-17%), suggesting challenges with correctly using the FLE API documentation. Additionally, GPT-5 and Grok 4 show surprisingly high rates of syntactic errors (21% and 17% respectively), failing to generate valid Python code more frequently than expected from frontier models.
+            </p>
+        </br>
+       
+            <h4 class="title is-5">Higher-Level Limitations</h4>
+            <ul style="font-size: 110%;">
+                <li><strong>Spatial Reasoning:</strong> Agents struggle to maintain consistent mental models of the factory layout. Misplacement of entities often cascades into larger failures, since the agent is unable to recover efficiently or reorganize the environment once errors occur.</li>
+                <li><strong>Abstraction and Tool Use:</strong> Although the FLE harness provides a Python namespace for defining helper functions and abstractions, agents rarely leverage this capability. Instead, they rely on primitive, out-of-the-box tools, which limits their ability to scale solutions to more complex tasks.</li>
+            </ul>
+            
+        </div>
+    </section>
+
+
+    <section class="section">
+        <div class="container is-max-widescreen">
+            <h2 class="title is-3"><span class="dvima">Future Work</span></h2>
+            <p style="font-size: 110%;">
+                Our evaluation revealed several key limitations in current model performance:
+            </p>
+            </br>
+            <ul style="font-size: 110%;">
+                <li><strong>Craft Item Overuse:</strong> Agents use craft_item liberally to create intermediate goods instead of assembly machines when the target item has a lot of dependencies (see Claude's partial success on production science pack). Since craft_item is run in fast mode with no real time cost, agents exploit this as a shortcut rather than building proper production infrastructure.</li>
+                </br>
+                <li><strong>Human Baseline:</strong> Establishing human performance benchmarks</li>
+                </br>
+                <li><strong>METR Task Scaling:</strong> Setting up task scaling charts for systematic evaluation</li>
+                </br>
+                <li><strong>Open Play Testing:</strong> We didn't run open play as this is prohibitively expensive to test for each model. However, we DID run open play on our best performing model, Claude.</li>
+            </ul>
+
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="columns is-centered">
+                <div class="column">
+                    <div class="content has-text-centered">
+                        <p>
+                            Website template borrowed from <a href="https://github.com/nerfies/nerfies.github.io" target="_blank">NeRFies</a>, <a href="https://github.com/cliport/cliport.github.io" target="_blank">CLIPort</a>, <a href="https://voyager.minedojo.org/" target="_blank">Voyager</a> and
+                            <a href="https://github.com/vimalabs/vimalabs.github.io" target="_blank">VIMA</a>.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
