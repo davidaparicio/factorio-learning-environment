@@ -1,28 +1,73 @@
-# Python/venv
+# Virtual environments
 .venv/
-.env
-.fle/
-__pycache__/
-*.pyc
-uv.lock
+venv_py311/
 
-# IDE/editor
+# IDEs and editors
 .idea/
 .vscode/
 .DS_Store
 
-# Build/dist
-/dist
-
-# Docker
-/fle/cluster/local/docker-compose.yml
-
-# Misc
-trajectory_logs/
+# Environment and config
+.env
+api_keys.json
 **/.claude/settings.local.json
-*.mp4
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Logs and data
+/log/
+*.log
+*.trace
 *.jsonl
+
+# Generated/build files
+/dist/
+/build/
+*.egg-info/
+uv.lock
+
+# Database
+.fle/
 *.db
 
-#fle
-.fle/
+# Media
+*.mp4
+!/docs/assets/videos/*.mp4
+/docs/assets/videos/
+
+# Dependencies
+/node_modules/
+
+# Experiment tracking
+wandb/
+summary_cache/
+
+# Docker
+/docker-compose.yml
+**/docker-compose.yml
+**/.compose.yaml
+
+# Project-specific data
+/dev/
+/client/log/
+/client/unscored_log/
+/fle/agents/data/
+/fle/eval/
+/eval/
+/data/
+/environment/src/.neptune/
+/environment/src/skills/
+/src/search/plots/
+trajectory_logs/
+
+# Claude Code
+/.claude-code/
+/.factorio_mcp_repo/
+/claude-code.zip
+
+# Misc
+cortex
+CLAUDE.md
+/server/CLAUDE.md
