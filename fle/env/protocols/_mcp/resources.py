@@ -1,3 +1,4 @@
+import asyncio
 import importlib.resources
 from typing import List, Dict
 
@@ -188,9 +189,16 @@ async def metrics() -> dict:
         await initialize_session(None)
 
     try:
-        res: Observation = state.gym_env.get_observation()
-        flows: ProductionFlows = res.flows
-        return flows.__dict__
+        res1: Observation = state.gym_env.get_observation()
+        flows1: ProductionFlows = res1.flows
+        await asyncio.sleep(1)
+
+        res2: Observation = state.gym_env.get_observation()
+        flows2: ProductionFlows = res2.flows
+
+        new_flows = ProductionFlows.get_new_flows(flows1, flows2)
+
+        return new_flows.__dict__
     except Exception as e:
         return {
             "error": str(e),

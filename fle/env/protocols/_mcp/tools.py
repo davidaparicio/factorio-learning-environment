@@ -58,6 +58,7 @@ async def execute(code: str) -> str:
         return "VCS not initialized. Please connect to a server first."
 
     instance = state.active_server
+    initial_player_pos = instance.namespace.player_location
 
     # Execute the code
     result, score, response = instance.eval(code, timeout=60)
@@ -87,6 +88,8 @@ async def execute(code: str) -> str:
         # Don't fail the whole execution just because state file update failed
         pass
 
+    '/c local surface = game.player.surface; for key, entity in pairs(surface.find_entities_filtered({force="enemy"})) do; entity.destroy(); end'
+
     # try:
     #     initial_obs = state.gym_env.unwrapped.get_observation(0)
     #     formatted_obs = BasicObservationFormatter(include_research=False).format(initial_obs).raw_str
@@ -96,7 +99,20 @@ async def execute(code: str) -> str:
     #     observation = str(e)
     #
     # lines = response.split("\b")
-    return f"[commit {commit_id[:8]}] - stdio:\n{response}\n"
+    meta = None
+    try:
+        player_pos = instance.namespace.player_location
+        # RCON command to move camera to player position
+        rcon_cmd = f"/c game.players[1].teleport({{x={initial_player_pos.x - player_pos.x}, y={initial_player_pos.y - player_pos.y}}})"  # ; game.player.zoom_to_world(game.player.position, 1)'
+        meta = instance.rcon_client.send_command(rcon_cmd)
+
+        kill_biters_cmd = '/c game.forces["enemy"].kill_all_units()'
+        instance.rcon_client.send_command(kill_biters_cmd)
+    except Exception as e:
+        # Don't fail execution if viewport move fails
+        meta = str(e)
+
+    return f"[commit {commit_id[:8]}] - stdio:\n{response}\n{meta}"
 
 
 @mcp.tool()
