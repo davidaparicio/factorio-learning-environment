@@ -28,11 +28,21 @@ class AgentMessage:
 
 
 @dataclass
+class TaskInfo:
+    """Represents task information and objectives"""
+
+    goal_description: str
+    agent_instructions: Optional[str]
+    task_key: str
+    trajectory_length: int
+
+
+@dataclass
 class Observation:
     """Complete observation of the game state"""
 
     raw_text: str
-    entities: List[str]  # Changed from List[Union[Entity, EntityGroup]] to List[str]
+    entities: List[str]
     inventory: Inventory
     research: ResearchState
     game_info: GameInfo
@@ -40,7 +50,9 @@ class Observation:
     flows: ProductionFlows
     task_verification: Optional[TaskResponse]
     messages: List[AgentMessage]
-    serialized_functions: List[Dict[str, Any]]  # List of serialized functions
+    serialized_functions: List[Dict[str, Any]]
+    task_info: Optional[TaskInfo]
+    map_image: str  # Base64 encoded PNG image
 
     @classmethod
     def from_dict(cls, obs_dict: Dict[str, Any]) -> "Observation":
@@ -138,6 +150,26 @@ class Observation:
         # Get serialized functions
         serialized_functions = obs_dict.get("serialized_functions", [])
 
+        # Convert task info - task_info dict should always be present now
+        task_info = None
+        task_dict = obs_dict.get("task_info", {})
+        # Only create TaskInfo if there's actual task data (non-empty goal_description indicates real task)
+        if task_dict.get("goal_description"):
+            # Convert empty string back to None for agent_instructions to maintain consistency
+            agent_instructions = task_dict.get("agent_instructions")
+            if agent_instructions == "":
+                agent_instructions = None
+
+            task_info = TaskInfo(
+                goal_description=task_dict.get("goal_description", ""),
+                agent_instructions=agent_instructions,
+                task_key=task_dict.get("task_key", ""),
+                trajectory_length=task_dict.get("trajectory_length", 0),
+            )
+
+        # Get map image (base64 encoded string)
+        map_image = obs_dict.get("map_image", "")
+
         return cls(
             raw_text=obs_dict.get("raw_text", ""),
             entities=entities,  # Now just passing the list of strings
@@ -149,6 +181,8 @@ class Observation:
             task_verification=task_verification,
             messages=messages,
             serialized_functions=serialized_functions,
+            task_info=task_info,
+            map_image=map_image,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -175,6 +209,7 @@ class Observation:
 
         return {
             "raw_text": self.raw_text,
+            "map_image": self.map_image,
             "entities": self.entities,  # Use string representation of entities
             "inventory": [
                 {"quantity": np.int32(v), "type": k}
@@ -230,4 +265,16 @@ class Observation:
                 for msg in self.messages
             ],
             "serialized_functions": self.serialized_functions,
+            "task_info": {
+                "goal_description": self.task_info.goal_description
+                if self.task_info
+                else "",
+                "agent_instructions": (self.task_info.agent_instructions or "")
+                if self.task_info
+                else "",  # Convert None to empty string for gym space
+                "task_key": self.task_info.task_key if self.task_info else "",
+                "trajectory_length": self.task_info.trajectory_length
+                if self.task_info
+                else 0,
+            },  # Always provide a task_info dict, even if empty
         }

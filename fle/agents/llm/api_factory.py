@@ -1,532 +1,238 @@
-import asyncio
 import os
+import logging
 
-import anthropic
-from openai import AsyncOpenAI, OpenAI
+from openai import AsyncOpenAI
 from tenacity import retry, wait_exponential
 
 from fle.agents.llm.metrics import timing_tracker, track_timing_async
 from fle.agents.llm.utils import (
-    format_messages_for_anthropic,
-    format_messages_for_openai,
-    has_image_content,
     merge_contiguous_messages,
     remove_whitespace_blocks,
 )
 
 
-class NoRetryAsyncOpenAI(AsyncOpenAI):
-    """Wrapper around AsyncOpenAI that always sets max_retries=0"""
+# Lazy import to avoid circular dependencies
+def _get_api_key_manager():
+    """Lazy import for API key manager to avoid circular imports."""
+    try:
+        from fle.eval.infra.api_key_manager import get_api_key_manager
 
-    def __init__(self, **kwargs):
-        kwargs["max_retries"] = 0
-        super().__init__(**kwargs)
+        return get_api_key_manager
+    except ImportError:
+        return None
+
+
+API_KEY_MANAGER_AVAILABLE = True  # Assume available, handle at runtime
 
 
 class APIFactory:
-    # Models that support image input
-    MODELS_WITH_IMAGE_SUPPORT = [
-        # Claude models with vision
-        "claude-3-opus",
-        "claude-3-sonnet",
-        "claude-3-haiku",
-        "claude-3-5-sonnet",
-        "claude-3-7-sonnet",
-        "claude-3.7-sonnet",
-        # OpenAI models with vision
-        "gpt-4-vision",
-        "gpt-4-turbo",
-        "gpt-4o",
-        "gpt-4-1106-vision-preview",
-    ]
+    # Provider configurations
+    PROVIDERS = {
+        "open-router": {
+            "base_url": "https://openrouter.ai/api/v1",
+            "api_key_env": "OPEN_ROUTER_API_KEY",
+            "key_manager_provider": "open-router",
+            "model_transform": lambda m: m.replace("open-router-", "")
+            if m.startswith("open-router-")
+            else m,
+        },
+        "claude": {
+            "base_url": "https://api.anthropic.com/v1",
+            "api_key_env": "ANTHROPIC_API_KEY",
+            "key_manager_provider": "anthropic",
+        },
+        "deepseek": {
+            "base_url": "https://api.deepseek.com",
+            "api_key_env": "DEEPSEEK_API_KEY",
+            "key_manager_provider": "deepseek",
+        },
+        "gemini": {
+            "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+            "api_key_env": "GEMINI_API_KEY",
+            "key_manager_provider": "gemini",
+        },
+        "together": {
+            "base_url": "https://api.together.xyz/v1",
+            "api_key_env": "TOGETHER_API_KEY",
+            "key_manager_provider": "together",
+        },
+        "openai": {
+            "base_url": "https://api.openai.com/v1",
+            "api_key_env": "OPENAI_API_KEY",
+            "key_manager_provider": "openai",
+        },
+    }
 
-    def __init__(self, model: str, beam: int = 1):
+    def __init__(self, model: str, beam: int = 1, api_key_config_file: str = None):
+        """Initialize APIFactory
+
+        Args:
+            model: Model name to use
+            beam: Beam size for sampling
+            api_key_config_file: Optional path to API key config file
+        """
         self.model = model
         self.beam = beam
+        self.api_key_config_file = (
+            api_key_config_file  # Store for child process reinitialization
+        )
+        self.api_key_manager = None
 
-    def _is_model_image_compatible(self, model: str) -> bool:
+    def _get_provider_config(self, model: str) -> dict:
+        """Get provider config based on model name
+
+        Models with '/' in the name (e.g., 'anthropic/claude-sonnet-4')
+        are OpenRouter models and should use OpenRouter API.
         """
-        Check if the model supports image inputs, accounting for model version suffixes.
+        # Check if this is an OpenRouter model (contains '/')
+        if "/" in model:
+            return self.PROVIDERS["open-router"]
 
-        Examples:
-            'claude-3.5-sonnet-20241022' -> matches 'claude-3.5-sonnet'
-            'gpt-4o-2024-05-13' -> matches 'gpt-4o'
+        # Otherwise, check for provider prefixes
+        for provider, config in self.PROVIDERS.items():
+            if provider in model:
+                return config
+        raise ValueError(f"No provider found for model: {model}")
+
+    def _get_api_key(self, provider_config: dict) -> str:
+        """Get API key with rotation if available
+
+        Args:
+            provider_config: Provider configuration dictionary
+
+        Returns:
+            API key string
         """
-        # Normalize the model name to lowercase
-        model_lower = model.lower()
+        # Try key manager first if available (reinitialize if needed due to multiprocessing)
+        if "key_manager_provider" in provider_config:
+            key_manager_provider = provider_config["key_manager_provider"]
 
-        # First check for exact matches
-        if model_lower in self.MODELS_WITH_IMAGE_SUPPORT:
-            return True
+            # Reinitialize API key manager in child process if needed
+            if not self.api_key_manager:
+                try:
+                    config_file = (
+                        self.api_key_config_file
+                        or os.getenv("FLE_API_KEY_CONFIG_FILE")
+                        or os.getenv("API_KEY_CONFIG_FILE")
+                    )
+                    if config_file:
+                        get_api_key_manager_func = _get_api_key_manager()
+                        if get_api_key_manager_func:
+                            self.api_key_manager = get_api_key_manager_func(config_file)
+                            logging.info(
+                                f"Reinitialized API key manager in child process: {config_file}"
+                            )
+                except Exception as e:
+                    logging.warning(
+                        f"Failed to reinitialize API key manager in child process: {e}"
+                    )
 
-        # Check for models with version number suffixes
-        for supported_model in self.MODELS_WITH_IMAGE_SUPPORT:
-            if supported_model in model:
-                return True
+            if self.api_key_manager:
+                rotated_key = self.api_key_manager.get_key(key_manager_provider)
+                if rotated_key:
+                    logging.debug(f"Using rotated key for {key_manager_provider}")
+                    return rotated_key
 
-        # Special handling for custom adaptations
-        if "vision" in model_lower and any(
-            gpt in model_lower for gpt in ["gpt-4", "gpt4"]
-        ):
-            return True
+        # Fallback to environment variable
+        env_var = provider_config["api_key_env"]
+        env_key = os.getenv(env_var)
 
-        return False
+        if env_key:
+            logging.debug(f"Using environment key from {env_var}")
+            return env_key
+
+        raise ValueError(
+            f"No API key available for provider. "
+            f"Set {env_var} or configure key manager."
+        )
+
+    def _mark_key_result(
+        self,
+        provider_config: dict,
+        api_key: str,
+        success: bool,
+        error: Exception = None,
+    ):
+        """Mark the result of using an API key
+
+        Args:
+            provider_config: Provider configuration
+            api_key: The API key that was used
+            success: Whether the API call was successful
+            error: Error that occurred (if any)
+        """
+        if self.api_key_manager and "key_manager_provider" in provider_config:
+            key_manager_provider = provider_config["key_manager_provider"]
+
+            if success:
+                self.api_key_manager.mark_key_success(key_manager_provider, api_key)
+            elif error:
+                self.api_key_manager.mark_key_error(
+                    key_manager_provider, api_key, error
+                )
 
     @track_timing_async("llm_api_call")
     @retry(wait=wait_exponential(multiplier=2, min=2, max=15))
-    async def acall(self, *args, **kwargs):
-        max_tokens = kwargs.get("max_tokens", 2000)
+    async def acall(self, **kwargs):
         model_to_use = kwargs.get("model", self.model)
         messages = kwargs.get("messages", [])
 
-        # Check for image content
-        has_images = has_image_content(messages)
+        # Get provider config
+        provider_config = self._get_provider_config(model_to_use)
 
-        # Validate image capability if images are present
-        if has_images and not self._is_model_image_compatible(model_to_use):
-            raise ValueError(
-                f"Model {model_to_use} does not support image inputs, but images were provided."
-            )
+        # Apply model transform if specified
+        if "model_transform" in provider_config:
+            model_to_use = provider_config["model_transform"](model_to_use)
 
-        if "open-router" in model_to_use:
-            async with timing_tracker.track_async(
-                "open_router_api_call", model=model_to_use, llm=True
+        # Prepare messages for text-only LLMs
+        messages = remove_whitespace_blocks(messages)
+        messages = merge_contiguous_messages(messages)
+
+        # Get API key with rotation
+        api_key = self._get_api_key(provider_config)
+
+        # Create client
+        client = AsyncOpenAI(
+            base_url=provider_config["base_url"],
+            api_key=api_key,
+            max_retries=0,  # We handle retries ourselves
+        )
+
+        try:
+            # Build the API call parameters
+            api_params = {
+                "model": model_to_use,
+                "messages": messages,
+                "max_tokens": kwargs.get("max_tokens", 256),
+                "temperature": kwargs.get("temperature", 0.3),
+                "logit_bias": kwargs.get("logit_bias"),
+                "n": kwargs.get("n_samples"),
+                "stop": kwargs.get("stop_sequences"),
+                "presence_penalty": kwargs.get("presence_penalty"),
+                "frequency_penalty": kwargs.get("frequency_penalty"),
+                "stream": False,
+            }
+
+            # Standard API call for all providers
+            response = await client.chat.completions.create(**api_params)
+            # Mark key as successful
+            self._mark_key_result(provider_config, api_key, success=True)
+
+            # Track reasoning tokens if available
+            if hasattr(response, "usage") and hasattr(
+                response.usage, "reasoning_tokens"
             ):
-                client = NoRetryAsyncOpenAI(
-                    base_url="https://openrouter.ai/api/v1",
-                    api_key=os.getenv("OPEN_ROUTER_API_KEY"),
-                )
-                response = await client.chat.completions.create(
-                    model=model_to_use.replace("open-router", "").strip("-"),
-                    max_tokens=kwargs.get("max_tokens", 256),
-                    temperature=kwargs.get("temperature", 0.3),
-                    messages=kwargs.get("messages", None),
-                    logit_bias=kwargs.get("logit_bias", None),
-                    n=kwargs.get("n_samples", None),
-                    stop=kwargs.get("stop_sequences", None),
-                    stream=False,
-                    presence_penalty=kwargs.get("presence_penalty", None),
-                    frequency_penalty=kwargs.get("frequency_penalty", None),
-                )
-                return response
-
-        if "claude" in model_to_use:
-            async with timing_tracker.track_async(
-                "claude_api_call", model=model_to_use, llm=True
-            ):
-                # Process system message
-                system_message = ""
-                if messages and messages[0]["role"] == "system":
-                    system_message = messages[0]["content"]
-                    if isinstance(system_message, list):
-                        # Extract just the text parts for system message
-                        system_text_parts = []
-                        for part in system_message:
-                            if isinstance(part, dict) and part.get("type") == "text":
-                                system_text_parts.append(part.get("text", ""))
-                            elif isinstance(part, str):
-                                system_text_parts.append(part)
-                        system_message = "\n".join(system_text_parts)
-                    system_message = system_message.strip()
-
-                # If the most recent message is from the assistant and ends with whitespace, clean it
-                if messages and messages[-1]["role"] == "assistant":
-                    if isinstance(messages[-1]["content"], str):
-                        messages[-1]["content"] = messages[-1]["content"].strip()
-
-                # If the most recent message is from the assistant, add a user message to prompt the assistant
-                if messages and messages[-1]["role"] == "assistant":
-                    messages.append({"role": "user", "content": "Success."})
-
-                if not has_images:
-                    # For text-only messages, use the standard processing
-                    messages = remove_whitespace_blocks(messages)
-                    messages = merge_contiguous_messages(messages)
-
-                    # Format for Claude API
-                    anthropic_messages = []
-                    for msg in messages:
-                        if msg["role"] != "system":  # System message handled separately
-                            anthropic_messages.append(
-                                {"role": msg["role"], "content": msg["content"]}
-                            )
-                else:
-                    # For messages with images, use the special formatter
-                    anthropic_messages = format_messages_for_anthropic(
-                        messages, system_message
-                    )
-
-                if not system_message:
-                    raise RuntimeError("No system message!!")
-
-                try:
-                    client = anthropic.Anthropic(max_retries=0)
-                    # Use asyncio.to_thread for CPU-bound operations
-                    response = await asyncio.to_thread(
-                        client.messages.create,
-                        temperature=kwargs.get("temperature", 0.7),
-                        max_tokens=max_tokens,
-                        model=model_to_use,
-                        messages=anthropic_messages,
-                        system=system_message,
-                        stop_sequences=kwargs.get("stop_sequences", ["```END"]),
-                    )
-                except Exception as e:
-                    print(e)
-                    raise
-
-                return response
-
-        elif "deepseek" in model_to_use:
-            if has_images:
-                raise ValueError(
-                    "Deepseek models do not support image inputs, but images were provided."
-                )
-
-            async with timing_tracker.track_async(
-                "deepseek_api_call", model=model_to_use, llm=True
-            ):
-                client = NoRetryAsyncOpenAI(
-                    api_key=os.getenv("DEEPSEEK_API_KEY"),
-                    base_url="https://api.deepseek.com",
-                )
-                try:
-                    response = await client.chat.completions.create(
-                        model=model_to_use,
-                        max_tokens=kwargs.get("max_tokens", 256),
-                        temperature=kwargs.get("temperature", 0.3),
-                        messages=kwargs.get("messages", None),
-                        logit_bias=kwargs.get("logit_bias", None),
-                        n=kwargs.get("n_samples", None),
-                        stop=kwargs.get("stop_sequences", None),
-                        stream=False,
-                        presence_penalty=kwargs.get("presence_penalty", None),
-                        frequency_penalty=kwargs.get("frequency_penalty", None),
-                    )
-                    return response
-                except Exception as e:
-                    print(e)
-                    raise
-
-        elif "gemini" in model_to_use:
-            if has_images:
-                raise ValueError(
-                    "Gemini integration doesn't support image inputs through this interface."
-                )
-
-            async with timing_tracker.track_async(
-                "gemini_api_call", model=model_to_use, llm=True
-            ):
-                client = NoRetryAsyncOpenAI(
-                    api_key=os.getenv("GEMINI_API_KEY"),
-                    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                )
-                response = await client.chat.completions.create(
+                async with timing_tracker.track_async(
+                    "reasoning",
                     model=model_to_use,
-                    max_tokens=kwargs.get("max_tokens", 256),
-                    temperature=kwargs.get("temperature", 0.3),
-                    messages=kwargs.get("messages", None),
-                    n=kwargs.get("n_samples", None),
-                    stream=False,
-                )
-                return response
-
-        elif any(model in model_to_use for model in ["llama", "Qwen"]):
-            if has_images:
-                raise ValueError(
-                    "Llama and Qwen models do not support image inputs through this interface."
-                )
-
-            async with timing_tracker.track_async(
-                "together_api_call", model=model_to_use, llm=True
-            ):
-                client = NoRetryAsyncOpenAI(
-                    api_key=os.getenv("TOGETHER_API_KEY"),
-                    base_url="https://api.together.xyz/v1",
-                )
-                return await client.chat.completions.create(
-                    model=model_to_use,
-                    max_tokens=kwargs.get("max_tokens", 256),
-                    temperature=kwargs.get("temperature", 0.3),
-                    messages=kwargs.get("messages", None),
-                    logit_bias=kwargs.get("logit_bias", None),
-                    n=kwargs.get("n_samples", None),
-                    stop=kwargs.get("stop_sequences", None),
-                    stream=False,
-                )
-
-        elif "o1-mini" in model_to_use or "o3-mini" in model_to_use:
-            if has_images:
-                raise ValueError(
-                    "Claude o1-mini and o3-mini models do not support image inputs."
-                )
-
-            async with timing_tracker.track_async(
-                "o1_mini_api_call", model=model_to_use, llm=True
-            ):
-                client = NoRetryAsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                # replace `max_tokens` with `max_completion_tokens` for OpenAI API
-                if "max_tokens" in kwargs:
-                    kwargs.pop("max_tokens")
-                messages = kwargs.get("messages")
-                messages[0]["role"] = "developer"
-                try:
-                    reasoning_length = "low"
-                    if "med" in model_to_use:
-                        reasoning_length = "medium"
-                    elif "high" in model_to_use:
-                        reasoning_length = "high"
-                    model = kwargs.get("model", "o3-mini")
-                    if "o3-mini" in model:
-                        model = "o3-mini"
-                    elif "o1-mini" in model:
-                        model = "o1-mini"
-
-                    response = await client.chat.completions.create(
-                        *args,
-                        n=self.beam,
-                        model=model,
-                        messages=messages,
-                        stream=False,
-                        response_format={"type": "text"},
-                        reasoning_effort=reasoning_length,
-                    )
-
-                    # Track reasoning metrics if available
-                    if hasattr(response, "usage") and hasattr(
-                        response.usage, "reasoning_tokens"
-                    ):
-                        async with timing_tracker.track_async(
-                            "reasoning",
-                            model=model_to_use,
-                            tokens=response.usage.reasoning_tokens,
-                            reasoning_length=reasoning_length,
-                        ):
-                            # This is just a marker for the timing - the actual reasoning happened in the API
-                            pass
-
-                    return response
-                except Exception as e:
-                    print(e)
-        else:
-            async with timing_tracker.track_async(
-                "openai_api_call", model=model_to_use, llm=True
-            ):
-                try:
-                    client = NoRetryAsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                    assert "messages" in kwargs, (
-                        "You must provide a list of messages to the model."
-                    )
-
-                    if has_images:
-                        # Format messages for OpenAI with image support
-                        formatted_messages = format_messages_for_openai(messages)
-                    else:
-                        formatted_messages = messages
-
-                    response = await client.chat.completions.create(
-                        model=model_to_use,
-                        max_tokens=kwargs.get("max_tokens", 256),
-                        temperature=kwargs.get("temperature", 0.3),
-                        messages=formatted_messages,
-                        logit_bias=kwargs.get("logit_bias", None),
-                        n=kwargs.get("n_samples", None),
-                        stop=kwargs.get("stop_sequences", None),
-                        stream=False,
-                        presence_penalty=kwargs.get("presence_penalty", None),
-                        frequency_penalty=kwargs.get("frequency_penalty", None),
-                    )
-
-                    # Track reasoning metrics if available
-                    if hasattr(response, "usage") and hasattr(
-                        response.usage, "reasoning_tokens"
-                    ):
-                        async with timing_tracker.track_async(
-                            "reasoning",
-                            model=model_to_use,
-                            tokens=response.usage.reasoning_tokens,
-                        ):
-                            # This is just a marker for the timing - the actual reasoning happened in the API
-                            pass
-
-                    return response
-                except Exception as e:
-                    print(e)
-                    try:
-                        client = NoRetryAsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                        assert "messages" in kwargs, (
-                            "You must provide a list of messages to the model."
-                        )
-
-                        # Attempt with truncated message history as fallback
-                        sys = kwargs.get("messages", None)[0]
-                        messages = [sys] + kwargs.get("messages", None)[8:]
-
-                        if has_images:
-                            # Format messages for OpenAI with image support
-                            formatted_messages = format_messages_for_openai(messages)
-                        else:
-                            formatted_messages = messages
-
-                        response = await client.chat.completions.create(
-                            model=model_to_use,
-                            max_tokens=kwargs.get("max_tokens", 256),
-                            temperature=kwargs.get("temperature", 0.3),
-                            messages=formatted_messages,
-                            logit_bias=kwargs.get("logit_bias", None),
-                            n=kwargs.get("n_samples", None),
-                            stop=kwargs.get("stop_sequences", None),
-                            stream=False,
-                            presence_penalty=kwargs.get("presence_penalty", None),
-                            frequency_penalty=kwargs.get("frequency_penalty", None),
-                        )
-
-                        # Track reasoning metrics if available
-                        if hasattr(response, "usage") and hasattr(
-                            response.usage, "reasoning_tokens"
-                        ):
-                            async with timing_tracker.track_async(
-                                "reasoning",
-                                model=model_to_use,
-                                tokens=response.usage.reasoning_tokens,
-                            ):
-                                # This is just a marker for the timing - the actual reasoning happened in the API
-                                pass
-
-                        return response
-                    except Exception as e:
-                        print(e)
-                        raise
-
-    def call(self, *args, **kwargs):
-        # For the synchronous version, we should also implement image support,
-        # but I'll leave this method unchanged as the focus is on the async version.
-        # The same pattern would be applied here as in acall.
-        max_tokens = kwargs.get("max_tokens", 1500)
-        model_to_use = kwargs.get("model", self.model)
-
-        messages = kwargs.get("messages", [])
-        has_images = self._has_image_content(messages)
-
-        # Validate image capability if images are present
-        if has_images and not self._is_model_image_compatible(model_to_use):
-            raise ValueError(
-                f"Model {model_to_use} does not support image inputs, but images were provided."
-            )
-
-        if "claude" in model_to_use:
-            # Process system message
-            system_message = ""
-            if messages and messages[0]["role"] == "system":
-                system_message = messages[0]["content"]
-                if isinstance(system_message, list):
-                    # Extract just the text parts for system message
-                    system_text_parts = []
-                    for part in system_message:
-                        if isinstance(part, dict) and part.get("type") == "text":
-                            system_text_parts.append(part.get("text", ""))
-                        elif isinstance(part, str):
-                            system_text_parts.append(part)
-                    system_message = "\n".join(system_text_parts)
-                system_message = system_message.strip()
-
-            # Remove final assistant content that ends with trailing whitespace
-            if messages[-1]["role"] == "assistant":
-                if isinstance(messages[-1]["content"], str):
-                    messages[-1]["content"] = messages[-1]["content"].strip()
-
-            # If the most recent message is from the assistant, add a user message to prompt the assistant
-            if messages[-1]["role"] == "assistant":
-                messages.append({"role": "user", "content": "Success."})
-
-            if not has_images:
-                # Standard text processing
-                messages = self.remove_whitespace_blocks(messages)
-                messages = self.merge_contiguous_messages(messages)
-
-                # Format for Claude API
-                anthropic_messages = []
-                for msg in messages:
-                    if msg["role"] != "system":  # System message handled separately
-                        anthropic_messages.append(
-                            {"role": msg["role"], "content": msg["content"]}
-                        )
-            else:
-                # Format with image support
-                anthropic_messages = self._format_messages_for_anthropic(
-                    messages, system_message
-                )
-
-            try:
-                client = anthropic.Anthropic()
-                response = client.messages.create(
-                    temperature=kwargs.get("temperature", 0.7),
-                    max_tokens=max_tokens,
-                    model=model_to_use,
-                    messages=anthropic_messages,
-                    system=system_message,
-                    stop_sequences=kwargs.get("stop_sequences", None),
-                )
-            except Exception as e:
-                print(e)
-                raise
+                    tokens=response.usage.reasoning_tokens,
+                ):
+                    pass
 
             return response
 
-        elif "deepseek" in model_to_use:
-            if has_images:
-                raise ValueError(
-                    "Deepseek models do not support image inputs, but images were provided."
-                )
-
-            client = OpenAI(
-                api_key=os.getenv("DEEPSEEK_API_KEY"),
-                base_url="https://api.deepseek.com",
-            )
-            response = client.chat.completions.create(
-                *args,
-                **kwargs,
-                model=model_to_use,
-                presence_penalty=kwargs.get("presence_penalty", None),
-                frequency_penalty=kwargs.get("frequency_penalty", None),
-                logit_bias=kwargs.get("logit_bias", None),
-                n=kwargs.get("n_samples", None),
-                stop=kwargs.get("stop_sequences", None),
-                stream=False,
-            )
-            return response
-
-        elif "o1-mini" in model_to_use:
-            if has_images:
-                raise ValueError("Claude o1-mini model does not support image inputs.")
-
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            # replace `max_tokens` with `max_completion_tokens` for OpenAI API
-            if "max_tokens" in kwargs:
-                kwargs.pop("max_tokens")
-
-            return client.chat.completions.create(
-                *args, n=self.beam, **kwargs, stream=False
-            )
-        else:
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            assert "messages" in kwargs, (
-                "You must provide a list of messages to the model."
-            )
-
-            if has_images:
-                # Format messages for OpenAI with image support
-                formatted_messages = self._format_messages_for_openai(messages)
-            else:
-                formatted_messages = messages
-
-            return client.chat.completions.create(
-                model=model_to_use,
-                max_tokens=kwargs.get("max_tokens", 256),
-                temperature=kwargs.get("temperature", 0.3),
-                messages=formatted_messages,
-                logit_bias=kwargs.get("logit_bias", None),
-                n=kwargs.get("n_samples", None),
-                stop=kwargs.get("stop_sequences", None),
-                stream=False,
-            )
+        except Exception as e:
+            # Mark key as having an error
+            self._mark_key_result(provider_config, api_key, success=False, error=e)
+            # Re-raise the exception to trigger retry mechanism
+            raise

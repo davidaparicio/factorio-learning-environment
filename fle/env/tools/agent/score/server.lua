@@ -209,7 +209,7 @@ local default_rounding = function(number)
   return number
 end
 
-production_score = {}
+local production_score = {}
 
 production_score.generate_price_list = function(param)
 
@@ -307,8 +307,8 @@ production_score.generate_price_list = function(param)
   return price_list
 end
 
-production_score.get_production_scores = function(price_list)
-  local price_list = price_list or production_score.generate_price_list()
+production_score.get_production_scores = function(_price_list)
+  local price_list = _price_list or production_score.generate_price_list()
   local scores = {}
   for k, force in pairs (game.forces) do
     local score = 0
@@ -329,10 +329,29 @@ production_score.get_production_scores = function(price_list)
   return scores
 end
 
+function dump(o)
+  if type(o) == 'table' then
+     local s = '{ '
+     for k,v in pairs(o) do
+        if type(k) ~= 'number' then k = '"'..k..'"' end
+        s = s .. '['..k..'] = ' .. dump(v) .. ','
+     end
+     return s .. '} '
+  else
+     return tostring(o)
+  end
+end
+
 global.goal = nil
+
+local scores = production_score.get_production_scores()
+if scores then
+    global.initial_score = scores
+end
+
 global.actions.score = function()
-    local production_score = production_score.get_production_scores()
-    production_score["player"] = production_score["player"] - global.initial_score["player"]
+    local prod_score = production_score.get_production_scores()
+    prod_score["player"] = prod_score["player"] - global.initial_score["player"]
     
     -- Try to get goal description from first player if available, otherwise skip
     local goal_description = nil
@@ -346,7 +365,7 @@ global.actions.score = function()
       --if goal_description ~= nil and #goal_description > 1 then
         --production_score["goal"] = goal_description[1]:gsub("-", "_")
       --end
-      return dump(production_score)
+      return dump(prod_score)
     end
-    return dump(production_score)
+    return dump(prod_score)
 end

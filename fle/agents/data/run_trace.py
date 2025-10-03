@@ -34,10 +34,10 @@ async def evaluate_program_trace(version: int = 330) -> None:
                 bounding_box=200,
                 tcp_port=27000,
                 cache_scripts=False,
-                fast=False,
+                fast=True,
                 inventory={},
             )
-            instance.speed(20)
+            instance.set_speed(20)
             return instance
         except Exception as e:
             raise e

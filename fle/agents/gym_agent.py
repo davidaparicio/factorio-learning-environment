@@ -7,6 +7,7 @@ from fle.commons.models.conversation import Conversation
 from fle.commons.models.generation_parameters import GenerationParameters
 from fle.commons.models.program import Program
 from fle.env.gym_env.observation_formatter import BasicObservationFormatter
+from fle.env.gym_env.system_prompt_formatter import SystemPromptFormatter
 from fle.eval.tasks import TaskABC
 
 from fle.agents.models import CompletionResult
@@ -16,10 +17,7 @@ from fle.agents.formatters import RecursiveReportFormatter
 from fle.agents.llm.api_factory import APIFactory
 from fle.agents.llm.parsing import parse_response
 
-GYM_AGENT_INSTRUCTIONS = """
-# Factorio Gym Agent Instructions
-
-## Overview
+GYM_AGENT_INSTRUCTIONS = """## Overview
 You are an AI agent designed to play Factorio through a gym environment, specializing in:
 - Long-horizon planning
 - Spatial reasoning 
@@ -55,7 +53,7 @@ your_code_here
 ## Best Practices
 
 ### Modularity
-- Create small, modular policies, MAXIMUM 30 lines of code
+- Create small, modular policies, MAXIMUM 50 lines of code
 - Each policy should have a single clear purpose
 - Keep policies easy to debug and modify
 - Avoid breaking existing automated structures
@@ -107,9 +105,7 @@ your_code_here
 - Prefer manual fueling for boilers
 {system_prompt}
 
-ALWAYS WRITE VALID PYTHON AND REMEMBER MAXIMUM 30 LINES OF CODE PER POLICY. YOUR WEIGHTS WILL BE ERASED IF YOU DON'T USE PYTHON.
-
-{goal_description}
+ALWAYS WRITE VALID PYTHON AND REMEMBER MAXIMUM 50 LINES OF CODE PER POLICY. YOUR WEIGHTS WILL BE ERASED IF YOU DON'T USE PYTHON.
 
 {agent_instructions}"""
 
@@ -122,13 +118,15 @@ class GymAgent(AgentABC):
         task: Any,
         agent_idx: Optional[int] = None,
         observation_formatter: Optional[BasicObservationFormatter] = None,
+        system_prompt_formatter: Optional[SystemPromptFormatter] = None,
+        api_key_config_file: Optional[str] = None,
         *args,
         **kwargs,
     ):
         instructions = self._get_instructions(system_prompt, task, agent_idx)
         super().__init__(model, instructions, *args, **kwargs)
         self.task = task
-        self.api_factory = APIFactory(model)
+        self.api_factory = APIFactory(model, api_key_config_file=api_key_config_file)
         self.observation_formatter = (
             observation_formatter or BasicObservationFormatter()
         )
@@ -139,6 +137,7 @@ class GymAgent(AgentABC):
             cache_dir=".fle/summary_cache",
         )
         self.generation_params = GenerationParameters(n=1, max_tokens=4096, model=model)
+        self.system_prompt_formatter = system_prompt_formatter
 
     def _get_instructions(
         self, system_prompt: str, task: TaskABC, agent_idx: Optional[int] = None
@@ -152,7 +151,7 @@ class GymAgent(AgentABC):
             goal_description=task.goal_description,
             agent_instructions=agent_instructions,
         )
-        return instructions
+        return instructions.rstrip()
 
     def reset(self, conversation: Conversation):
         self.conversation = copy.deepcopy(conversation)

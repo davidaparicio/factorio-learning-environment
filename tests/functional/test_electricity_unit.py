@@ -29,7 +29,7 @@ def game(instance):
     }
 
     instance.reset()
-    instance.speed(10)
+    instance.set_speed(10)
     yield instance.namespace
 
 
@@ -83,7 +83,7 @@ def test_create_offshore_pump_to_steam_engine(game):
 
     assert steam_engine.direction.value == Direction.opposite(boiler.direction).value
 
-    image = game._render(Position(x=5, y=0), zoom=5)
+    image = game._render()  # , zoom=5)
     image.show()
     pass
 

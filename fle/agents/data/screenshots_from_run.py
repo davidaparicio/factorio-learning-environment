@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from data.screenshots_to_mp4 import png_to_mp4
 from fle.env import FactorioInstance
 from fle.commons.models.program import Program
-from cluster.local.cluster_ips import get_local_container_ips
+from fle.commons.cluster_ips import get_local_container_ips
 
 load_dotenv()
 
@@ -317,7 +317,7 @@ def main():
     for version in [
         2755,
         2757,
-    ]:  # range(1892, 1895):#range(755, 775):#[764]:#[804, 798, 800, 598, 601, 576, 559 ]:
+    ]:
         parser = argparse.ArgumentParser(
             description="Capture Factorio program evolution screenshots"
         )

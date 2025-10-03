@@ -2,7 +2,7 @@ import math
 from typing import Tuple, Any, Union, Dict, Literal
 from typing import List, Optional
 from enum import Enum, IntFlag
-from pydantic import BaseModel, model_validator
+from pydantic import ConfigDict, BaseModel, model_validator, model_serializer
 
 
 class Layer(IntFlag):
@@ -109,13 +109,13 @@ class EntityStatus(Enum):
 
 
 class Inventory(BaseModel):
-    class Config:
-        populate_by_name = True
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(
+        populate_by_name=True, arbitrary_types_allowed=True, extra="allow"
+    )
 
-    def __init__(self, **data):
-        super().__init__()
-        self.__dict__.update(data)
+    # def __init__(self, **data):
+    #     super().__init__()
+    #     self.__dict__.update(data)
 
     def __getitem__(self, key: "Prototype", default=None) -> int:  # noqa
         try:
@@ -126,41 +126,65 @@ class Inventory(BaseModel):
             else:
                 name = key
         except Exception:
-            pass
-        return self.__dict__[name] if name in self.__dict__ else 0
+            name = key
+        # return self.__dict__[name] if name in self.__dict__ else 0
+        if hasattr(self, "__pydantic_extra__"):
+            return self.__pydantic_extra__.get(name, 0)
+        return getattr(self, name, 0)
 
-    def get(self, key: "Prototype", default=0) -> int:  # noqa
-        try:
-            if hasattr(key, "value"):
-                name, _ = key.value
-            else:
-                name = key
-        except Exception:
-            pass
-
-        item = self.__getitem__(name)
+    def get(self, key, default=0) -> int:
+        item = self.__getitem__(key)
         return item if item else default
 
-    def __setitem__(self, key: "Prototype", value: int) -> None:  # noqa
-        self.__dict__[key] = value
+    def __setitem__(self, key, value: int) -> None:
+        if hasattr(key, "value"):
+            name, _ = key.value
+        else:
+            name = key
+
+        if hasattr(self, "__pydantic_extra__"):
+            self.__pydantic_extra__[name] = value
+        else:
+            setattr(self, name, value)
 
     def items(self):
-        return self.__dict__.items()
-
-    def __repr__(self) -> str:
-        return f"Inventory({str(self.__dict__)})"
-
-    def __str__(self) -> str:
-        return str(self.__dict__)
-
-    def __len__(self) -> int:
-        return len(self.__dict__)
+        if hasattr(self, "__pydantic_extra__"):
+            return self.__pydantic_extra__.items()
+        return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}.items()
 
     def keys(self):
-        return self.__dict__.keys()
+        if hasattr(self, "__pydantic_extra__"):
+            return self.__pydantic_extra__.keys()
+        return [k for k in self.__dict__.keys() if not k.startswith("_")]
 
     def values(self):
-        return self.__dict__.values()
+        if hasattr(self, "__pydantic_extra__"):
+            return self.__pydantic_extra__.values()
+        return [v for k, v in self.__dict__.items() if not k.startswith("_")]
+
+    def __len__(self) -> int:
+        if hasattr(self, "__pydantic_extra__"):
+            return len(self.__pydantic_extra__)
+        return len([k for k in self.__dict__.keys() if not k.startswith("_")])
+
+    def __add__(self, other):
+        if not isinstance(other, Inventory):
+            return NotImplemented
+
+        result_data = dict(self.items())
+        for key, value in other.items():
+            if key in result_data:
+                result_data[key] = result_data[key] + value
+            else:
+                result_data[key] = value
+
+        return Inventory(**result_data)
+
+    @model_serializer
+    def serialize_model(self):
+        if hasattr(self, "__pydantic_extra__"):
+            return self.__pydantic_extra__
+        return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
 
 class Direction(Enum):
@@ -168,6 +192,11 @@ class Direction(Enum):
     RIGHT = EAST = 2
     DOWN = SOUTH = 4
     LEFT = WEST = 6
+    #
+    # UPRIGHT = NORTHEAST = 8
+    # DOWNRIGHT = SOUTHEAST = 10
+    # DOWNLEFT = SOUTHWEST = 12
+    # UPLEFT = NORTHWEST = 14
 
     def __repr__(self):
         return f"Direction.{self.name}"
@@ -402,7 +431,7 @@ class Product(Ingredient):
 
 
 class Recipe(BaseModel):
-    name: Optional[str]
+    name: Optional[str] = None
     ingredients: Optional[List[Ingredient]] = []
     products: Optional[List[Product]] = []
     energy: Optional[float] = 0
@@ -413,16 +442,15 @@ class Recipe(BaseModel):
 class BurnerType(BaseModel):
     """Type of entity that burns fuel"""
 
-    class Config:
-        arbitrary_types_allowed = True
-
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     fuel: Inventory = Inventory()  # Use this to check the fuel levels of the entity
 
 
 class EntityCore(BaseModel):
     # id: Optional[str] = None
+    model_config = ConfigDict(extra="allow")
     name: str
-    direction: Direction
+    direction: Direction = Direction.NORTH
     position: Position
 
     def __repr__(self):
@@ -437,7 +465,7 @@ class Entity(EntityCore):
     type: Optional[str] = None
     dimensions: Dimensions
     tile_dimensions: TileDimensions
-    prototype: Any  # Prototype
+    prototype: Any = None  # Prototype
     health: float
     warnings: List[str] = []
     status: EntityStatus = EntityStatus.NORMAL
@@ -525,7 +553,8 @@ class TransportBelt(Entity):
 
     input_position: Position
     output_position: Position
-    inventory: Inventory = Inventory()
+    # inventory: Inventory = Inventory()
+    inventory: Dict[Literal["left", "right"], Inventory] = {"left": {}, "right": {}}
     is_terminus: bool = False
     is_source: bool = False
     _height: float = 1

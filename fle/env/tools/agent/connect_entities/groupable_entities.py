@@ -39,8 +39,7 @@ def _construct_group(
     id: int, entities: List[Entity], prototype: Prototype, position: Position
 ) -> EntityGroup:
     if prototype == Prototype.TransportBelt or isinstance(entities[0], TransportBelt):
-        if len(entities) == 1:
-            return entities[0]
+        # Always return BeltGroup for consistent return types, even for single belts
         inputs = [c for c in entities if c.is_source]
         outputs = [c for c in entities if c.is_terminus]
         inventory = Inventory()
@@ -48,12 +47,26 @@ def _construct_group(
             if (
                 hasattr(entity, "inventory") and entity.inventory
             ):  # Check if inventory exists and is not empty
-                entity_inventory = entity.inventory
-                for item, value in entity_inventory.items():
-                    current_value = inventory.get(
-                        item, 0
-                    )  # Get current value or 0 if not exists
-                    inventory[item] = current_value + value  # Add new value
+                if (
+                    "left" in entity.inventory.keys()
+                    or "right" in entity.inventory.keys()
+                ):
+                    for inv in ["left", "right"]:
+                        if inv not in entity.inventory:
+                            continue
+                        entity_inventory = entity.inventory[inv]
+                        for item, value in entity_inventory.items():
+                            current_value = inventory.get(
+                                item, 0
+                            )  # Get current value or 0 if not exists
+                            inventory[item] = current_value + value  # Add new value
+                else:
+                    entity_inventory = entity.inventory
+                    for item, value in entity_inventory.items():
+                        current_value = inventory.get(
+                            item, 0
+                        )  # Get current value or 0 if not exists
+                        inventory[item] = current_value + value  # Add new value
 
         if any(entity.warnings and entity.warnings[0] == "full" for entity in entities):
             status = EntityStatus.FULL_OUTPUT
@@ -152,6 +165,32 @@ def consolidate_underground_belts(belt_groups):
 
                     # Create new underground belt representing the whole section
                     try:
+                        if "left" in entrance.inventory:
+                            if "left" in exit.inventory:
+                                left_inventory = (
+                                    entrance.inventory["left"] + exit.inventory["left"]
+                                )
+                            else:
+                                left_inventory = entrance.inventory["left"]
+                        else:
+                            if "left" in exit.inventory:
+                                left_inventory = exit.inventory["left"]
+                            else:
+                                left_inventory = Inventory()
+
+                        if "right" in entrance.inventory:
+                            if "right" in exit.inventory:
+                                right_inventory = (
+                                    exit.inventory["right"] + exit.inventory["right"]
+                                )
+                            else:
+                                right_inventory = exit.inventory["right"]
+                        else:
+                            if "right" in exit.inventory:
+                                right_inventory = exit.inventory["right"]
+                            else:
+                                right_inventory = Inventory()
+
                         consolidated = UndergroundBelt(
                             name=entrance.name,
                             id=entrance.id,
@@ -169,12 +208,16 @@ def consolidate_underground_belts(belt_groups):
                             status=entrance.status,
                             prototype=entrance.prototype,
                             health=min(entrance.health, exit.health),
-                            inventory=Inventory(
-                                **{
-                                    **entrance.inventory.__dict__,
-                                    **exit.inventory.__dict__,
-                                }
-                            ),
+                            inventory={
+                                "left": left_inventory,
+                                "right": right_inventory,
+                            },
+                            # inventory=Inventory(
+                            #     **{
+                            #         **entrance.inventory.__dict__,
+                            #         **exit.inventory.__dict__,
+                            #     }
+                            # ),
                         )
                         new_belts.append(consolidated)
                     except Exception:
@@ -543,6 +586,13 @@ def agglomerate_groupable_entities(
 
     if not connected_entities:
         return []
+
+    # Check if entities are already grouped - if so, return them as-is
+    if hasattr(connected_entities[0], "__class__") and connected_entities[
+        0
+    ].__class__.__name__ in ["BeltGroup", "PipeGroup", "ElectricityGroup", "WallGroup"]:
+        # Entities are already grouped, return them directly
+        return connected_entities
 
     if hasattr(connected_entities[0], "prototype"):
         prototype = connected_entities[0].prototype

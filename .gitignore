@@ -1,26 +1,19 @@
-# Virtual environments
+# Python/venv
 .venv/
-venv_py311/
-
-# IDEs and editors
-.idea/
-.vscode/
-.DS_Store
-
-# Environment and config
 .env
+.fle/
 api_keys.json
 **/.claude/settings.local.json
 
 # Python cache
 __pycache__/
 *.pyc
+uv.lock
 
-# Logs and data
-/log/
-*.log
-*.trace
-*.jsonl
+# IDE/editor
+.idea/
+.vscode/
+.DS_Store
 
 # Generated/build files
 /dist/
@@ -28,39 +21,57 @@ __pycache__/
 *.egg-info/
 uv.lock
 
+# Docker
+**/docker-compose.yml
+
+# Misc
+trajectory_logs/
+wandb/
+summary_cache/
+**/.claude/settings.local.json
+*.mp4
+*.jsonl
+*.db
+CLAUDE.md
+
+# API
+api_keys.json
+/log/
+*.log
+*.trace
+*.jsonl
+
 # Database
 .fle/
 *.db
-
-# Media
-*.mp4
-!/docs/assets/videos/*.mp4
-/docs/assets/videos/
-
-# Dependencies
-/node_modules/
 
 # Experiment tracking
 wandb/
 summary_cache/
 
-# Docker
+# Jack's stuff.
 /docker-compose.yml
-**/docker-compose.yml
-**/.compose.yaml
+/data/plans/factorio_guides/
+/docs/assets/videos/
+/fle/agents/data/blueprints_to_policies/blueprints/
+/fle/eval/open/plots/technology_icons/
+/data/icons/
+/eval/open/plots/
 
-# Project-specific data
-/dev/
-/client/log/
-/client/unscored_log/
-/fle/agents/data/
-/fle/eval/
-/eval/
-/data/
-/environment/src/.neptune/
-/environment/src/skills/
-/src/search/plots/
-trajectory_logs/
+/data/vqa/logs/
+/data/vqa/tasks/spatial_reasoning/.compose.yaml
+/data/vqa/tasks/spatial_reasoning/logs/
+/data/vqa/tasks/logs/
+/data/vqa/images/
+/data/vqa/dataset/images/
+/data/vqa/tasks/basic/logs/
+/data/vqa/tasks/contrastive_alignment/logs/
+/data/vqa/tasks/contrastive_alignment/logs/
+/data/logs/
+/data/logs/
+/.factorio_mcp_repo/
+/.claude-code/
+/claude-code.zip
 
 # Claude Code
 /.claude-code/

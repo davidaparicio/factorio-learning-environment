@@ -280,6 +280,23 @@ class DBClient(ABC):
             print(f"Error fetching largest depth: {e}")
             return 0
 
+    async def execute_query(
+        self, query: str, params: tuple = None
+    ) -> List[Dict[str, Any]]:
+        """Execute a query and return results as list of dictionaries"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=DictCursor) as cur:
+                    if params:
+                        cur.execute(query, params)
+                    else:
+                        cur.execute(query)
+                    results = cur.fetchall()
+                    return [dict(row) for row in results]
+        except Exception as e:
+            print(f"Error executing query: {e}")
+            return []
+
     @tenacity.retry(
         retry=retry_if_exception_type(
             (psycopg2.OperationalError, psycopg2.InterfaceError)
@@ -332,7 +349,7 @@ class DBClient(ABC):
                         FROM recent
                         """,
                         (version),
-                    )  # , max_assistant_length))
+                    )
 
                     results = cur.fetchall()
                     if not results:
@@ -685,6 +702,24 @@ class SQLliteDBClient(DBClient):
             print(f"Error creating program: {e}")
             raise e
 
+    async def execute_query(
+        self, query: str, params: tuple = None
+    ) -> List[Dict[str, Any]]:
+        """Execute a query and return results as list of dictionaries (SQLite version)"""
+        try:
+            with self.get_connection() as conn:
+                conn.row_factory = sqlite3.Row  # Enable dict-like access
+                cur = conn.cursor()
+                if params:
+                    cur.execute(query, params)
+                else:
+                    cur.execute(query)
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            print(f"Error executing query: {e}")
+            return []
+
 
 def create_default_sqlite_db(db_file: str) -> None:
     """Create SQLite database with required schema if it doesn't exist"""
@@ -862,3 +897,11 @@ async def create_db_client(
         )
     else:
         raise Exception(f"Invalid database type: {db_type}")
+
+
+async def get_next_version() -> int:
+    """Get next available version number"""
+    db_client = await create_db_client()
+    version = await db_client.get_largest_version()
+    await db_client.cleanup()
+    return version + 1
