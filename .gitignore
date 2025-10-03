@@ -43,6 +43,8 @@ api_keys.json
 
 # Database
 .fle/
+
+.ipynb_checkpoints/
 *.db
 
 # Experiment tracking

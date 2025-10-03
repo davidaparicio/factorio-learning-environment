@@ -32,14 +32,13 @@ jobs:
           echo "✓ Found scenario directory"
           ls -la ./fle/cluster/scenarios/default_lab_scenario
 
-      - name: Start 4 Factorio servers
-        run: |
-          cd fle/cluster
-          bash run-envs.sh start -n 4
-
       - name: Install Python dependencies
         run: |
-          uv sync --all-extras --dev
+          uv sync --dev
+
+      - name: Start 4 Factorio servers
+        run: |
+          uv run python fle/run.py cluster start -n 4
 
       - name: Run Python tests (4 workers)
         run: |
@@ -51,12 +50,13 @@ jobs:
       - name: Show test logs on failure
         if: failure()
         run: |
-          cd fle/cluster
           echo "=== Factorio container logs ==="
-          docker compose -f docker-compose.yml logs factorio_0
+          uv run python fle/run.py cluster logs factorio_0 | tail -n 100
+          uv run python fle/run.py cluster logs factorio_1 | tail -n 100
+          uv run python fle/run.py cluster logs factorio_2 | tail -n 100
+          uv run python fle/run.py cluster logs factorio_3 | tail -n 100
 
       - name: Stop server
         if: always()
         run: |
-          cd fle/cluster
-          bash run-envs.sh stop
+          uv run python fle/run.py cluster stop
