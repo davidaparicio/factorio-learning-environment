@@ -58,7 +58,6 @@ async def execute(code: str) -> str:
         return "VCS not initialized. Please connect to a server first."
 
     instance = state.active_server
-    initial_player_pos = instance.namespace.player_location
 
     # Execute the code
     result, score, response = instance.eval(code, timeout=60)
@@ -90,24 +89,18 @@ async def execute(code: str) -> str:
 
     '/c local surface = game.player.surface; for key, entity in pairs(surface.find_entities_filtered({force="enemy"})) do; entity.destroy(); end'
 
-    # try:
-    #     initial_obs = state.gym_env.unwrapped.get_observation(0)
-    #     formatted_obs = BasicObservationFormatter(include_research=False).format(initial_obs).raw_str
-    #
-    #     observation = formatted_obs
-    # except Exception as e:
-    #     observation = str(e)
-    #
-    # lines = response.split("\b")
-    meta = None
     try:
         player_pos = instance.namespace.player_location
         # RCON command to move camera to player position
-        rcon_cmd = f"/c game.players[1].teleport({{x={initial_player_pos.x - player_pos.x}, y={initial_player_pos.y - player_pos.y}}})"  # ; game.player.zoom_to_world(game.player.position, 1)'
+        rcon_cmd = f"/c game.players[1].teleport({{x={player_pos.x}, y={player_pos.y}}})"  # ; game.player.zoom_to_world(game.player.position, 1)'
         meta = instance.rcon_client.send_command(rcon_cmd)
 
         kill_biters_cmd = '/c game.forces["enemy"].kill_all_units()'
         instance.rcon_client.send_command(kill_biters_cmd)
+
+        clear_rendering = "/c rendering.clear()"
+        instance.rcon_client.send_command(clear_rendering)
+
     except Exception as e:
         # Don't fail execution if viewport move fails
         meta = str(e)

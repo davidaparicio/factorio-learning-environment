@@ -236,7 +236,13 @@ async def render_at(center_x: str, center_y: str, radius: int = 32) -> ImageCont
         cx = float(center_x)
         cy = float(center_y)
 
-        img = instance.namespace._render(position=Position(cx, cy), radius=radius)
+        try:
+            img = instance.namespace._render(position=Position(cx, cy), radius=radius)
+        except Exception:
+            img = instance.namespace._render_simple(
+                position=Position(cx, cy), radius=radius
+            )
+
         if img is None:
             raise Exception(
                 "Failed to render: Game state not properly initialized or player entity invalid"
