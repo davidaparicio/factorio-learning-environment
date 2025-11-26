@@ -16,7 +16,7 @@ An open source framework for developing and evaluating LLM agents in the game of
 ## Quick Links
 
 - [Installation](#installation)
-- [Examples](#examples)
+- [Environment](#environment)
 - [Contributing](#contributing)
 
 ## Installation
