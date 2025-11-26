@@ -50,6 +50,9 @@ exclude_patterns = []
 # a list of builtin themes.
 html_theme = "sphinx_rtd_theme"
 
+# Base URL for GitHub Pages deployment
+html_base_url = "https://jackhopkins.github.io/factorio-learning-environment/sphinx/build/html/"
+
 # Disable "View page source" links on all pages
 html_show_sourcelink = False
 
