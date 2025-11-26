@@ -33,7 +33,6 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
-    "sphinx.ext.githubpages"
     "sphinx_autodoc_typehints",
 ]
 
