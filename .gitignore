@@ -19,7 +19,6 @@ uv.lock
 /dist/
 /build/
 *.egg-info/
-uv.lock
 
 # Docker
 **/docker-compose.yml
@@ -84,3 +83,4 @@ summary_cache/
 cortex
 CLAUDE.md
 /server/CLAUDE.md
+configs
