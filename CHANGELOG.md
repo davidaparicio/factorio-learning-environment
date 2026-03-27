@@ -5,6 +5,30 @@ All notable changes to the Factorio Learning Environment will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-03-27
+
+### Fixed
+
+**Critical Direction System Hotfix**
+
+This hotfix resolves direction-related test failures introduced in v0.4.0. The issue was caused by an incorrect divide-by-2 conversion that was added in PR #359.
+
+- **Problem**: PR #359 added direction conversion logic assuming Python's Direction enum used values (0,2,4,6), but it actually uses Factorio 2.0's native values (0,4,8,12). This caused direction values to be incorrectly converted (e.g., LEFT=12 became 6=DOWNRIGHT).
+
+- **Solution**: Removed all divide-by-2 conversion logic:
+  - Simplified `serialize_direction_fix.lua` to pass through Factorio 2.0 values unchanged
+  - Removed Python-side fallback in `controller.py` that was dividing directions by 2
+  - Direction values now flow correctly: Factorio (0,4,8,12) → Python Direction enum (0,4,8,12)
+
+- **Tests Fixed**:
+  - All placement direction tests now pass (test_place_in_all_directions, test_place_offshore_pumps, test_place_burner_inserters, test_place_splitter)
+  - All 9 rotation tests now pass (test_rotate.py)
+  - Fixes ~20 direction-related test failures from v0.4.0
+
+**Users should upgrade from v0.4.0 to v0.4.1 immediately** to get correct direction handling for entity placement and rotation.
+
+---
+
 ## [0.4.0] - 2026-03-27
 
 ### 🎮 Factorio 2.0 Migration
