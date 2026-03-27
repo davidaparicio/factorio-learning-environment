@@ -5,6 +5,36 @@ All notable changes to the Factorio Learning Environment will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-03-27
+
+### Added
+
+**Comprehensive Lab Observation Test Coverage**
+
+- Added extensive test coverage for lab entity observation in `get_entities()` API
+- 2 new test functions (`test_get_lab` and `test_get_lab_edge_cases`) with 13 total permutations:
+  - Empty labs (just placed)
+  - Labs with science packs (no power)
+  - Labs with power connected
+  - Multiple labs
+  - Labs in mixed entity queries
+  - Labs with position/radius filtering
+  - Labs with full/empty inventories
+  - Labs queried immediately after placement
+  - Labs at far distances
+
+**Test Coverage Improvements**
+
+- All 20 tests in `test_get_entities.py` now pass
+- Validates that labs are fully observable on player's force in all scenarios
+- Confirms force filtering works as designed (enemy/neutral labs not visible)
+
+### Notes
+
+This release adds regression tests to ensure lab entities remain observable through the `get_entities()` API. The comprehensive test suite covers edge cases and validates that the only scenario where labs don't appear is when on a different force (enemy/neutral), which is intentional security design.
+
+---
+
 ## [0.4.1] - 2026-03-27
 
 ### Fixed
