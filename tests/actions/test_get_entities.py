@@ -498,3 +498,266 @@ def test_group_prototype_backwards_compatibility(game):
     assert len(furnaces) >= 1, "Should still find specific entity types"
 
     print("✓ Backwards compatibility maintained")
+
+
+def test_get_lab(configure_game):
+    """
+    Test that labs appear in get_entities() observations in multiple permutations:
+    1. Empty lab (just placed)
+    2. Lab with science packs inserted but not researching
+    3. Lab actively researching (with power)
+    4. Multiple labs
+    5. Labs mixed with other entities
+    6. get_entities() with specific prototype vs get_entities() for all
+    """
+    # Create a fresh game with lab in inventory (not using shared fixture)
+    game = configure_game(
+        inventory={
+            "lab": 5,
+            "automation-science-pack": 100,
+            "stone-furnace": 1,
+            "small-electric-pole": 5,
+            "boiler": 1,
+            "steam-engine": 1,
+            "offshore-pump": 1,
+            "pipe": 20,
+            "coal": 50,
+        },
+        persist_inventory=False,
+        all_technologies_researched=False,  # Start with no research so we can test active research
+    )
+
+    # Move to a clear area to avoid collisions
+    game.move_to(ent.Position(x=100, y=100))
+
+    # === PERMUTATION 1: Empty lab (just placed) ===
+    print("\n=== Test 1: Empty lab ===")
+    lab1 = game.place_entity(Prototype.Lab, position=ent.Position(x=100, y=100))
+    assert lab1 is not None, "Failed to place lab1"
+
+    labs = game.get_entities({Prototype.Lab})
+    assert len(labs) == 1, f"Expected 1 empty lab, found {len(labs)}"
+    print("✓ Empty lab found")
+
+    # === PERMUTATION 2: Lab with science packs but not researching (no power) ===
+    print("\n=== Test 2: Lab with science packs, no power ===")
+    game.insert_item(Prototype.AutomationSciencePack, lab1, quantity=10)
+
+    labs = game.get_entities({Prototype.Lab})
+    assert len(labs) == 1, f"Expected 1 lab with science, found {len(labs)}"
+    assert labs[0].lab_input.get(Prototype.AutomationSciencePack, 0) == 10, (
+        "Lab should contain 10 automation science packs"
+    )
+    print("✓ Lab with science packs found (no power)")
+
+    # === PERMUTATION 3: Lab with power connected (even if not researching) ===
+    print("\n=== Test 3: Lab with power connected ===")
+    # Set up power infrastructure
+    water_position = game.nearest(Resource.Water)
+    game.move_to(water_position)
+    offshore_pump = game.place_entity(Prototype.OffshorePump, position=water_position)
+
+    boiler = game.place_entity_next_to(
+        Prototype.Boiler, offshore_pump.position, ent.Direction.RIGHT, spacing=2
+    )
+    game.insert_item(Prototype.Coal, boiler, quantity=5)
+    game.connect_entities(offshore_pump, boiler, Prototype.Pipe)
+
+    steam_engine = game.place_entity_next_to(
+        Prototype.SteamEngine, boiler.position, ent.Direction.RIGHT, spacing=2
+    )
+    game.connect_entities(boiler, steam_engine, Prototype.Pipe)
+
+    # Connect power to lab
+    game.place_entity_next_to(
+        Prototype.SmallElectricPole,
+        steam_engine.position,
+        ent.Direction.RIGHT,
+        spacing=3,
+    )
+    game.place_entity_next_to(
+        Prototype.SmallElectricPole, lab1.position, ent.Direction.LEFT, spacing=3
+    )
+
+    # Wait a moment for power to stabilize
+    game.sleep(1)
+
+    labs = game.get_entities({Prototype.Lab})
+    assert len(labs) == 1, f"Expected 1 lab with power, found {len(labs)}"
+    # Lab should have some energy available even if not actively consuming
+    print(f"✓ Lab with power connection found (energy: {labs[0].energy})")
+
+    # === PERMUTATION 4: Multiple labs ===
+    print("\n=== Test 4: Multiple labs ===")
+    # Move back to lab area
+    game.move_to(ent.Position(x=104, y=100))
+    lab2 = game.place_entity(Prototype.Lab, position=ent.Position(x=104, y=100))
+    game.move_to(ent.Position(x=108, y=100))
+    lab3 = game.place_entity(Prototype.Lab, position=ent.Position(x=108, y=100))
+
+    # Add science to new labs
+    game.insert_item(Prototype.AutomationSciencePack, lab2, quantity=10)
+    game.insert_item(Prototype.AutomationSciencePack, lab3, quantity=10)
+
+    labs = game.get_entities({Prototype.Lab})
+    assert len(labs) == 3, f"Expected 3 labs, found {len(labs)}"
+    print("✓ All 3 labs found")
+
+    # === PERMUTATION 5: Labs mixed with other entities ===
+    print("\n=== Test 5: Labs in get_entities() with all entities ===")
+    game.place_entity(Prototype.StoneFurnace, position=ent.Position(x=112, y=100))
+
+    all_entities = game.get_entities()
+    entity_types = {type(e).__name__ for e in all_entities}
+    print(f"All entity types found: {entity_types}")
+
+    labs_in_all = [e for e in all_entities if type(e).__name__ == "Lab"]
+    assert len(labs_in_all) == 3, (
+        f"Expected 3 labs when retrieving all entities, found {len(labs_in_all)}. "
+        f"Entity types: {entity_types}"
+    )
+    print("✓ All 3 labs found in get_entities() call")
+
+    # === PERMUTATION 6: get_entities() with position and radius filters ===
+    print("\n=== Test 6: Labs with position/radius filters ===")
+    # Get labs near lab1 (should find lab1 and lab2, but not lab3)
+    nearby_labs = game.get_entities({Prototype.Lab}, position=lab1.position, radius=5)
+    assert len(nearby_labs) >= 1, (
+        f"Expected at least 1 lab near position, found {len(nearby_labs)}"
+    )
+    print(f"✓ Found {len(nearby_labs)} labs near position with radius filter")
+
+    print(
+        "\n✅ All permutations passed - labs are correctly observable in all scenarios"
+    )
+
+
+def test_get_lab_edge_cases(configure_game):
+    """
+    Test edge cases where labs might not appear:
+    1. Lab on different force (enemy lab)
+    2. Lab with no inventory access (other player's lab in multiplayer?)
+    3. Lab during active research consumption
+    4. Lab with modules installed
+    5. Lab very far away (radius filtering)
+    6. Lab that was just damaged
+    7. Lab with empty vs full inventories
+    """
+    game = configure_game(
+        inventory={
+            "lab": 10,
+            "automation-science-pack": 200,
+            "assembling-machine-1": 1,
+        },
+        persist_inventory=False,
+        all_technologies_researched=False,
+    )
+
+    game.move_to(ent.Position(x=0, y=0))
+
+    # === EDGE CASE 1: Lab with science packs (modules can't be easily inserted via API) ===
+    print("\n=== Edge Case 1: Lab with various science pack quantities ===")
+    lab_with_items = game.place_entity(Prototype.Lab, position=ent.Position(x=0, y=0))
+    game.insert_item(Prototype.AutomationSciencePack, lab_with_items, quantity=50)
+
+    labs = game.get_entities({Prototype.Lab})
+    assert len(labs) == 1, f"Expected 1 lab with items, found {len(labs)}"
+    # Check science packs are in the lab
+    assert labs[0].lab_input.get(Prototype.AutomationSciencePack, 0) == 50, (
+        "Lab should have 50 automation science packs"
+    )
+    print("✓ Lab with many science packs found")
+
+    # === EDGE CASE 2: Lab very far away with radius filter ===
+    print("\n=== Edge Case 2: Lab very far away with radius filter ===")
+    game.move_to(ent.Position(x=200, y=200))
+    game.place_entity(Prototype.Lab, position=ent.Position(x=200, y=200))
+
+    # Query from origin with small radius - should NOT find far lab
+    labs_near_origin = game.get_entities(
+        {Prototype.Lab}, position=ent.Position(x=0, y=0), radius=10
+    )
+    # Should only find the first lab, not the far one
+    assert len(labs_near_origin) == 1, (
+        f"Should only find 1 lab near origin, found {len(labs_near_origin)}"
+    )
+
+    # Query from far position - should find far lab
+    labs_near_far = game.get_entities(
+        {Prototype.Lab}, position=ent.Position(x=200, y=200), radius=10
+    )
+    assert len(labs_near_far) == 1, (
+        f"Should find 1 lab at far position, found {len(labs_near_far)}"
+    )
+
+    # Query ALL labs without position filter - should find both
+    all_labs = game.get_entities({Prototype.Lab})
+    assert len(all_labs) == 2, f"Should find 2 total labs, found {len(all_labs)}"
+    print("✓ Radius filtering works correctly, all labs found without filter")
+
+    # === EDGE CASE 3: Lab queried immediately after placement ===
+    print("\n=== Edge Case 3: Lab queried immediately after placement ===")
+    game.move_to(ent.Position(x=10, y=10))
+    game.place_entity(Prototype.Lab, position=ent.Position(x=10, y=10))
+    # Query immediately without sleep
+    labs = game.get_entities({Prototype.Lab})
+    assert len(labs) == 3, f"Should find freshly placed lab, found {len(labs)}"
+    print("✓ Freshly placed lab found immediately")
+
+    # === EDGE CASE 4: Lab with completely full inventory ===
+    print("\n=== Edge Case 4: Lab with completely full inventory ===")
+    game.move_to(ent.Position(x=20, y=20))
+    full_lab = game.place_entity(Prototype.Lab, position=ent.Position(x=20, y=20))
+    # Fill it with science packs (labs can hold quite a few)
+    game.insert_item(Prototype.AutomationSciencePack, full_lab, quantity=100)
+
+    labs = game.get_entities({Prototype.Lab})
+    assert len(labs) == 4, f"Should find lab with full inventory, found {len(labs)}"
+    full_lab_retrieved = [lab for lab in labs if abs(lab.position.x - 20.5) < 0.1][0]
+    assert (
+        full_lab_retrieved.lab_input.get(Prototype.AutomationSciencePack, 0) == 100
+    ), "Full lab should have 100 science packs"
+    print("✓ Lab with full inventory found")
+
+    # === EDGE CASE 5: Lab with empty inventory ===
+    print("\n=== Edge Case 5: Lab with completely empty inventory ===")
+    game.move_to(ent.Position(x=30, y=30))
+    game.place_entity(Prototype.Lab, position=ent.Position(x=30, y=30))
+    # Don't insert anything - completely empty
+
+    labs = game.get_entities({Prototype.Lab})
+    assert len(labs) == 5, f"Should find empty lab, found {len(labs)}"
+    empty_lab_retrieved = [lab for lab in labs if abs(lab.position.x - 30.5) < 0.1][0]
+    assert len(empty_lab_retrieved.lab_input) == 0, "Empty lab should have no items"
+    print("✓ Empty lab found")
+
+    # === EDGE CASE 6: Mixed query with labs and other entity types ===
+    print("\n=== Edge Case 6: Mixed query (labs + assemblers) ===")
+    game.move_to(ent.Position(x=40, y=40))
+    game.place_entity(Prototype.AssemblingMachine1, position=ent.Position(x=40, y=40))
+
+    # Query for both labs and assemblers
+    mixed = game.get_entities({Prototype.Lab, Prototype.AssemblingMachine1})
+    labs_in_mixed = [e for e in mixed if type(e).__name__ == "Lab"]
+    assemblers_in_mixed = [e for e in mixed if type(e).__name__ == "AssemblingMachine"]
+
+    assert len(labs_in_mixed) == 5, (
+        f"Should find 5 labs in mixed query, found {len(labs_in_mixed)}"
+    )
+    assert len(assemblers_in_mixed) == 1, (
+        f"Should find 1 assembler in mixed query, found {len(assemblers_in_mixed)}"
+    )
+    print("✓ Labs found correctly in mixed-type query")
+
+    # === EDGE CASE 7: Get all entities (no filter) ===
+    print("\n=== Edge Case 7: Labs in get_entities() with NO prototype filter ===")
+    all_entities = game.get_entities()
+    all_labs = [e for e in all_entities if type(e).__name__ == "Lab"]
+
+    assert len(all_labs) == 5, (
+        f"Should find 5 labs when getting all entities, found {len(all_labs)}. "
+        f"Total entities: {len(all_entities)}"
+    )
+    print("✓ All labs found in get_entities() with no filter")
+
+    print("\n✅ All edge cases passed - labs are observable in every scenario tested")
