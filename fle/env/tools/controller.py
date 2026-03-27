@@ -93,10 +93,8 @@ class Controller:
                     cleaned_response[key] = Direction.from_string(value)
                 elif isinstance(value, (int, float)):
                     dir_val = int(value)
-                    # Values > 6 are raw Factorio 2.0 defines.direction (0,4,8,12)
-                    # that weren't converted by the Lua side; convert to Python enum (0,2,4,6)
-                    if dir_val > 6:
-                        dir_val = dir_val // 2
+                    # Factorio 2.0 uses direction values 0,4,8,12 which match our Direction enum
+                    # No conversion needed - pass through directly
                     try:
                         cleaned_response[key] = Direction(dir_val)
                     except ValueError:
