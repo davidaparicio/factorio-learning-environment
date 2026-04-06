@@ -55,6 +55,7 @@ dependencies = [
     "jinja2>=3.1.6",
     "hf>=0.0.14",
     "psycopg2-binary>=2.9.10",
+    "fastapi>=0.68.0",
 ]
 
 [project.optional-dependencies]
@@ -103,6 +104,10 @@ env = [
     "tenacity",
     "fastapi>=0.68.0",
 ]
+inspect = [
+    "inspect-ai>=0.3.139",
+    "fastapi>=0.68.0",
+]
 
 [project.scripts]
 fle = "fle.run:main"
@@ -143,4 +148,5 @@ publish-url = "https://test.pypi.org/legacy/"
 [dependency-groups]
 dev = [
     "pytest-asyncio>=1.2.0",
+    "pytest-xdist>=3.8.0",
 ]

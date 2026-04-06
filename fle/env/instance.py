@@ -18,7 +18,6 @@ from dotenv import load_dotenv
 from fle.env.lua_manager import LuaScriptManager
 from fle.env.namespace import FactorioNamespace
 from fle.env.utils.rcon import _lua2python
-from fle.commons.models.research_state import ResearchState
 from factorio_rcon import RCONClient
 from fle.commons.models.game_state import GameState
 from fle.env.utils.controller_loader.system_prompt_generator import (
@@ -221,6 +220,10 @@ class FactorioInstance:
         self.lua_script_manager.load_init_into_game("initialise")
         self.lua_script_manager.setup_tools(self)
 
+        # Freeze namespace names so agent code cannot shadow tools/builtins
+        for ns in self.namespaces:
+            ns._freeze_protected_names()
+
         if inventory is None:
             inventory = {}
         self.initial_inventory = inventory
@@ -239,6 +242,8 @@ class FactorioInstance:
                 **self.lua_script_manager.tool_scripts,
             }
             self.lua_script_manager.setup_tools(self)
+            for ns in self.namespaces:
+                ns._freeze_protected_names()
             self.initialise(fast, all_technologies_researched, clear_entities)
 
         self.initial_score, _ = self.first_namespace.score()
@@ -297,17 +302,6 @@ class FactorioInstance:
             self.first_namespace._reset(
                 inventories, reset_position, all_technologies_researched, clear_entities
             )
-            # Reset the technologies
-            if not all_technologies_researched:
-                self.first_namespace._load_research_state(
-                    ResearchState(
-                        technologies={},
-                        research_progress=0,
-                        current_research=None,
-                        research_queue=[],
-                        progress={},
-                    )
-                )
         else:
             # Reset the game instance with the correct player's inventory and messages if multiagent
             self.first_namespace._reset(
